@@ -1,10 +1,13 @@
 import "server-only";
 
 import type { Goal, Milestone } from "@/generated/prisma/client";
-import { adminDb, type ScopedTx } from "@/lib/db";
-import { computeGoalProgress, computeMilestoneProgress } from "@/lib/domain/progress";
-import { NotFoundError } from "./errors";
-import { toGoalDTO, toNumberOrNull, type GoalDTO } from "./mappers";
+import { adminDb, forUser, type ScopedTx } from "@/lib/db";
+import { toDayNumber, type LocalDate } from "@/lib/domain/dates";
+import { GOAL_COLORS, isGoalColor } from "@/lib/domain/goal-colors";
+import { computeGoalProgress, computeMilestoneProgress, type ProgressMode } from "@/lib/domain/progress";
+import { rankAfter } from "@/lib/domain/rank";
+import { NotFoundError, ValidationError } from "./errors";
+import { fromLocalDate, toGoalDTO, toMilestoneDTO, toNumberOrNull, type GoalDTO, type MilestoneDTO } from "./mappers";
 
 /**
  * Goal and milestone cached fields (progress, metricCurrent).
@@ -95,5 +98,126 @@ export async function recomputeGoal(goalId: string): Promise<GoalDTO> {
     }
     const { goal } = await recomputeGoalInTx(tx, goalId);
     return toGoalDTO(goal);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Create
+// ---------------------------------------------------------------------------
+
+/** V1 focus rule: at most 5 active goals, one per goal color. */
+export const MAX_ACTIVE_GOALS = 5;
+
+export type CreateGoalInput = {
+  title: string;
+  why?: string | null;
+  /** One of GOAL_COLORS. Defaults to the first color no active goal uses. */
+  color?: string;
+  progressMode: ProgressMode;
+  /** Required in METRIC mode, e.g. "km". */
+  metricUnit?: string | null;
+  /** Required and positive in METRIC mode. */
+  metricTarget?: number | null;
+  startDate: LocalDate;
+  targetDate?: LocalDate | null;
+};
+
+function assertDate(value: LocalDate, field: string) {
+  try {
+    toDayNumber(value);
+  } catch {
+    throw new ValidationError(`${field} must be a YYYY-MM-DD date.`);
+  }
+}
+
+export async function createGoal(userId: string, input: CreateGoalInput): Promise<GoalDTO> {
+  const title = input.title.trim();
+  if (title === "") throw new ValidationError("A goal needs a title.");
+  assertDate(input.startDate, "startDate");
+  const targetDate = input.targetDate ?? null;
+  if (targetDate !== null) {
+    assertDate(targetDate, "targetDate");
+    if (toDayNumber(targetDate) < toDayNumber(input.startDate)) {
+      throw new ValidationError("targetDate can't be before startDate.");
+    }
+  }
+  if (input.color !== undefined && !isGoalColor(input.color)) {
+    throw new ValidationError(`color must be one of ${GOAL_COLORS.join(", ")}.`);
+  }
+  const isMetric = input.progressMode === "METRIC";
+  const metricUnit = input.metricUnit?.trim() ?? "";
+  const metricTarget = input.metricTarget ?? null;
+  if (isMetric && (metricTarget === null || metricTarget <= 0 || metricUnit === "")) {
+    throw new ValidationError("A metric goal needs a positive metricTarget and a metricUnit.");
+  }
+
+  return forUser(userId).$transaction(async (tx) => {
+    const active = await tx.goal.findMany({ where: { status: "ACTIVE" }, select: { color: true } });
+    if (active.length >= MAX_ACTIVE_GOALS) {
+      throw new ValidationError(`You can have at most ${MAX_ACTIVE_GOALS} active goals. Pause or finish one first.`);
+    }
+    const used = new Set(active.map((g) => g.color));
+    const color = input.color ?? GOAL_COLORS.find((c) => !used.has(c)) ?? GOAL_COLORS[0];
+    const last = await tx.goal.findFirst({ orderBy: { rank: "desc" }, select: { rank: true } });
+
+    const goal = await tx.goal.create({
+      data: {
+        userId,
+        title,
+        why: input.why?.trim() || null,
+        color,
+        progressMode: input.progressMode,
+        metricUnit: isMetric ? metricUnit : null,
+        metricTarget: isMetric ? metricTarget : null,
+        startDate: fromLocalDate(input.startDate),
+        targetDate: targetDate === null ? null : fromLocalDate(targetDate),
+        rank: rankAfter(last?.rank ?? null),
+      },
+    });
+    return toGoalDTO(goal);
+  });
+}
+
+export type CreateMilestoneInput = {
+  title: string;
+  description?: string | null;
+  /** 1..3, default 1. */
+  weight?: number;
+  targetDate?: LocalDate | null;
+};
+
+/** Adds a milestone at the end of the goal's list and recomputes the goal. */
+export async function createMilestone(
+  userId: string,
+  goalId: string,
+  input: CreateMilestoneInput,
+): Promise<MilestoneDTO> {
+  const title = input.title.trim();
+  if (title === "") throw new ValidationError("A milestone needs a title.");
+  const weight = input.weight ?? 1;
+  if (!Number.isInteger(weight) || weight < 1 || weight > 3) {
+    throw new ValidationError("weight must be 1, 2 or 3.");
+  }
+  if (input.targetDate) assertDate(input.targetDate, "targetDate");
+
+  return forUser(userId).$transaction(async (tx) => {
+    const goal = await tx.goal.findUnique({ where: { id: goalId }, select: { id: true } });
+    if (goal === null) throw new NotFoundError("Goal", goalId);
+    const last = await tx.milestone.findFirst({ where: { goalId }, orderBy: { rank: "desc" }, select: { rank: true } });
+
+    const milestone = await tx.milestone.create({
+      data: {
+        userId,
+        goalId,
+        title,
+        description: input.description?.trim() || null,
+        weight,
+        targetDate: input.targetDate ? fromLocalDate(input.targetDate) : null,
+        rank: rankAfter(last?.rank ?? null),
+      },
+    });
+    // A new 0% milestone lowers a MILESTONES goal's weighted progress.
+    await recomputeGoalInTx(tx, goalId);
+    return toMilestoneDTO(milestone);
   });
 }

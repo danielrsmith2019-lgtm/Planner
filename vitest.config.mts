@@ -20,7 +20,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "integration",
-          include: ["src/services/**/*.test.ts"],
+          include: ["src/services/**/*.test.ts", "prisma/**/*.test.ts"],
           setupFiles: ["./test/setup-db.ts"],
           testTimeout: 30_000,
           hookTimeout: 60_000,

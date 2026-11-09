@@ -16,3 +16,17 @@ export class ValidationError extends Error {
     this.name = "ValidationError";
   }
 }
+
+/**
+ * A journal save was based on an old version (another tab or device saved
+ * first). The client should show "This entry changed elsewhere" and reload.
+ */
+export class StaleEntryError extends Error {
+  readonly currentVersion: number;
+
+  constructor(date: string, expectedVersion: number, currentVersion: number) {
+    super(`Journal entry for ${date} is at version ${currentVersion}, not ${expectedVersion}.`);
+    this.name = "StaleEntryError";
+    this.currentVersion = currentVersion;
+  }
+}
