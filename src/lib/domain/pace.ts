@@ -10,7 +10,9 @@
  * (from getLocalToday(user)); this module never reads the clock.
  */
 
-export type LocalDate = string;
+import { toDayNumber, type LocalDate } from "./dates";
+
+export type { LocalDate };
 export type PaceStatus = "ahead" | "on_track" | "behind";
 
 export const AHEAD_MARGIN = 0.05;
@@ -18,8 +20,6 @@ export const BEHIND_MARGIN = 0.1;
 
 /** Absorbs floating-point error at the exact boundary values. */
 const EPSILON = 1e-9;
-const MS_PER_DAY = 86_400_000;
-const LOCAL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export type ExpectedProgressInput = {
   startDate: LocalDate;
@@ -31,23 +31,6 @@ export type PaceInput = ExpectedProgressInput & {
   /** 0..1 */
   progress: number;
 };
-
-/** Whole days since 1970-01-01 for a calendar date. UTC math, so no DST shifts. */
-function toDayNumber(date: LocalDate): number {
-  const match = LOCAL_DATE.exec(date);
-  if (!match) throw new RangeError(`Expected a YYYY-MM-DD date, got "${date}"`);
-
-  const [, y, m, d] = match;
-  const year = Number(y);
-  const month = Number(m);
-  const day = Number(d);
-  const ms = Date.UTC(year, month - 1, day);
-  const check = new Date(ms);
-  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
-    throw new RangeError(`"${date}" is not a real calendar date`);
-  }
-  return ms / MS_PER_DAY;
-}
 
 /** Share of the goal's window that has elapsed, 0..1. Null without a target date. */
 export function computeExpectedProgress({ startDate, targetDate, today }: ExpectedProgressInput): number | null {
