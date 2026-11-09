@@ -1,26 +1,672 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+/* Light only. Class-based dark variant means shadcn's dark: styles never
+   switch on just because the phone or laptop is in OS dark mode. */
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   BASECAMP DESIGN SYSTEM: LIGHT MODE (Apple Health + Bevel + Fitbod)
+   Ported from BaseCamp main (src/app/globals.css + src/styles/mobile-responsive.css).
+   Naming note: shadcn owns primary / secondary / muted / accent / card, so
+   BaseCamp's text tokens are renamed: text-primary -> text-fg,
+   text-secondary -> text-fg-secondary, text-tertiary -> text-fg-tertiary.
+   Every other BaseCamp name and value is unchanged.
+   ========================================================================== */
+
+@theme {
+  /* Page backgrounds */
+  --color-canvas: #F2F2F7;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F9F9FB;
+
+  /* Text (renamed from BaseCamp primary / secondary / tertiary) */
+  --color-fg: #1C1C1E;
+  --color-fg-secondary: #8E8E93;
+  --color-fg-tertiary: #AEAEB2;
+
+  /* Borders (border itself comes from the shadcn bridge below) */
+  --color-border-strong: rgba(60, 60, 67, 0.25);
+
+  /* System colors (Apple HIG) */
+  --color-bc-blue: #007AFF;
+  --color-bc-blue-light: #E3F2FD;
+  --color-bc-blue-dark: #1565C0;
+  --color-bc-green: #34C759;
+  --color-bc-green-light: #E8F5E9;
+  --color-bc-green-dark: #2E7D32;
+  --color-bc-orange: #FF9500;
+  --color-bc-orange-light: #FFF3E0;
+  --color-bc-orange-dark: #E65100;
+  --color-bc-red: #FF3B30;
+  --color-bc-red-light: #FFEBEE;
+  --color-bc-red-dark: #C62828;
+  --color-bc-purple: #AF52DE;
+  --color-bc-purple-light: #F3E5F5;
+  --color-bc-purple-dark: #7B1FA2;
+  --color-bc-teal: #5AC8FA;
+  --color-bc-teal-light: #E0F7FA;
+  --color-bc-teal-dark: #00838F;
+  --color-bc-pink: #FF2D55;
+  --color-bc-pink-light: #FCE4EC;
+  --color-bc-pink-dark: #AD1457;
+  --color-bc-indigo: #5856D6;
+  --color-bc-indigo-light: #E8EAF6;
+  --color-bc-indigo-dark: #283593;
+
+  /* Goal accents: 5 max. Base = rings, borders, dots. -light = tint
+     backgrounds. -dark = text on white (base colors are too faint for text). */
+  --color-goal-1: #34C759;
+  --color-goal-1-light: #E8F5E9;
+  --color-goal-1-dark: #2E7D32;
+  --color-goal-2: #5856D6;
+  --color-goal-2-light: #E8EAF6;
+  --color-goal-2-dark: #283593;
+  --color-goal-3: #AF52DE;
+  --color-goal-3-light: #F3E5F5;
+  --color-goal-3-dark: #7B1FA2;
+  --color-goal-4: #FF9500;
+  --color-goal-4-light: #FFF3E0;
+  --color-goal-4-dark: #E65100;
+  --color-goal-5: #5AC8FA;
+  --color-goal-5-light: #E0F7FA;
+  --color-goal-5-dark: #00838F;
+
+  /* Functional colors (aliases of system colors) */
+  --color-done: #34C759;
+  --color-on-track: #34C759;
+  --color-ahead: #007AFF;
+  --color-behind: #FF9500;
+  --color-stalled: #FF9500;
+  --color-missed: #FF3B30;
+  --color-planned: #8E8E93;
+
+  /* Fonts: SF Pro on Apple devices, DM Sans (next/font) everywhere else */
+  --font-sans: -apple-system, "SF Pro Display", var(--font-dm-sans), system-ui, sans-serif;
+  --font-rounded: "SF Pro Rounded", var(--font-dm-sans), -apple-system, system-ui, sans-serif;
+  --font-mono: "SF Mono", var(--font-jetbrains), ui-monospace, monospace;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-float: 0 4px 16px rgba(0, 122, 255, 0.3);
+}
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Mobile layer (from BaseCamp mobile-responsive.css) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --bottom-nav-height: 64px;
+  --touch-min: 44px;
+
+  /* ---------- shadcn/ui variables, mapped to BaseCamp light ---------- */
+  --radius: 20px;
+
+  --background: #F2F2F7;
+  --foreground: #1C1C1E;
+
+  --card: #FFFFFF;
+  --card-foreground: #1C1C1E;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1C1E;
+
+  --primary: #007AFF;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(0, 122, 255, 0.1);
+  --secondary-foreground: #007AFF;
+
+  --muted: #F9F9FB;
+  --muted-foreground: #8E8E93;
+  --accent: #F2F2F7;
+  --accent-foreground: #1C1C1E;
+
+  --destructive: #FF3B30;
+  --border: rgba(60, 60, 67, 0.12);
+  --input: rgba(60, 60, 67, 0.25);
+  --ring: #007AFF;
+
+  --chart-1: #34C759;
+  --chart-2: #5856D6;
+  --chart-3: #AF52DE;
+  --chart-4: #FF9500;
+  --chart-5: #5AC8FA;
+
+  --sidebar: rgba(255, 255, 255, 0.72);
+  --sidebar-foreground: #1C1C1E;
+  --sidebar-primary: #007AFF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F2F2F7;
+  --sidebar-accent-foreground: #1C1C1E;
+  --sidebar-border: rgba(60, 60, 67, 0.12);
+  --sidebar-ring: #007AFF;
 }
 
+/* shadcn token bridge. Radii use BaseCamp's values (10 / 14 / 20 / 24). */
 @theme inline {
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: var(--radius);
+  --radius-xl: 24px;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ---------- Keyframes ---------- */
+
+@keyframes bc-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---------- Base ---------- */
+
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior: none;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-canvas);
+    color: var(--color-fg);
+    overscroll-behavior-y: contain;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Global touch targets + no iOS input zoom (BaseCamp mobile layer) */
+  @media (max-width: 639px) {
+    button,
+    [role="button"],
+    a,
+    input,
+    select,
+    textarea {
+      min-height: var(--touch-min);
+    }
+
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ==========================================================================
+   COMPONENT CLASSES (BaseCamp bc-* names)
+   Values are written out in full: Tailwind v4 cannot @apply a custom class
+   from the same @layer components block.
+   ========================================================================== */
+
+@layer components {
+  /* ---------- Cards ---------- */
+
+  .bc-card {
+    background: var(--color-surface);
+    border-radius: 20px;
+    border: 0.5px solid var(--border);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .bc-card-flush {
+    background: var(--color-surface);
+    border-radius: 20px;
+    border: 0.5px solid var(--border);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Left accent bar inside a card row (task blocks, goal cards, recap rows) */
+  .bc-indicator {
+    width: 4px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ---------- Typography ---------- */
+
+  .bc-stat {
+    font-family: var(--font-sans);
+    font-size: 26px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--color-fg);
+  }
+
+  .bc-data {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  /* Times and paces only */
+  .bc-data-mono {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .bc-section-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+
+  /* "TODAY", "TOP 3", "GOALS", "REFLECTION" (BaseCamp stride-section-label) */
+  .bc-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-fg-secondary);
+  }
+
+  .bc-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-fg-secondary);
+  }
+
+  .bc-caption {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-fg-tertiary);
+  }
+
+  .bc-wordmark {
+    font-family: var(--font-rounded);
+    font-size: 20px;
+    letter-spacing: -0.02em;
+    color: var(--color-fg);
+    display: flex;
+    align-items: baseline;
+  }
+
+  /* ---------- Pills ---------- */
+
+  /* Set colors with utilities, e.g. bg-bc-green-light text-bc-green-dark */
+  .bc-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  /* ---------- Buttons ---------- */
+
+  .bc-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    background: var(--color-bc-blue);
+    color: #FFFFFF;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 12px 24px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  .bc-btn-primary:hover { opacity: 0.9; }
+  .bc-btn-primary:active { transform: scale(0.98); }
+
+  .bc-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(0, 122, 255, 0.1);
+    color: var(--color-bc-blue);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .bc-btn-secondary:hover { background: rgba(0, 122, 255, 0.15); }
+  .bc-btn-secondary:active { transform: scale(0.98); }
+
+  /* Small inline action, e.g. "Schedule" on a stalled goal */
+  .bc-btn-log {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-bc-blue);
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  .bc-btn-log:hover { opacity: 0.9; }
+  .bc-btn-log:active { transform: scale(0.97); }
+
+  .bc-btn-primary:disabled,
+  .bc-btn-secondary:disabled,
+  .bc-btn-log:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .bc-btn-primary:focus-visible,
+  .bc-btn-secondary:focus-visible,
+  .bc-btn-log:focus-visible,
+  .bc-tab:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* ---------- Inputs ---------- */
+
+  .bc-input {
+    width: 100%;
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 0.5px solid var(--color-border-strong);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .bc-input::placeholder { color: var(--color-fg-tertiary); }
+  .bc-input:focus {
+    border-color: var(--color-bc-blue);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+  }
+  .bc-input:disabled {
+    background: var(--color-surface-alt);
+    cursor: not-allowed;
+  }
+
+  /* ---------- Segmented tabs (Plan / Do / Reflect) ---------- */
+
+  .bc-tab-bar {
+    display: flex;
+    background: var(--color-surface);
+    border-radius: 20px;
+    border: 0.5px solid var(--border);
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .bc-tab {
+    flex: 1;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-fg-secondary);
+    padding: 8px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+  }
+  .bc-tab:hover {
+    color: var(--color-fg);
+    background: var(--color-surface-alt);
+  }
+  .bc-tab.active,
+  .bc-tab-active,
+  .bc-tab.active:hover,
+  .bc-tab-active:hover {
+    background: var(--color-bc-blue);
+    color: #FFFFFF;
+  }
+
+  /* ---------- Insight row (recap rows, stalled warnings) ---------- */
+
+  .bc-insight {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 0.5px solid var(--border);
+    background: var(--color-surface);
+    align-items: flex-start;
+  }
+
+  .bc-insight-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ---------- Frosted header and bottom nav ---------- */
+
+  .bc-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: calc(56px + var(--safe-top));
+    padding: var(--safe-top) 16px 0;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  @media (min-width: 768px) {
+    .bc-header { padding-left: 24px; padding-right: 24px; }
+  }
+
+  .bc-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px 0;
+    padding-bottom: max(8px, var(--safe-bottom));
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 0.5px solid var(--border);
+  }
+
+  .bc-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--color-fg-tertiary);
+    padding: 4px 12px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .bc-nav-item.active { color: var(--color-bc-blue); }
+
+  /* Spacer so page content clears the fixed bottom nav */
+  .bottom-nav-spacer {
+    height: calc(var(--bottom-nav-height) + var(--safe-bottom) + 16px);
+  }
+
+  /* ---------- Misc ---------- */
+
+  .bc-divider {
+    height: 0.5px;
+    background: var(--border);
+    border: none;
+    margin: 16px 0;
+  }
+
+  .bc-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-bc-blue-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-bc-blue-dark);
+  }
+
+  .bc-skeleton {
+    background: linear-gradient(90deg, var(--color-surface-alt) 25%, #ECECF1 50%, var(--color-surface-alt) 75%);
+    background-size: 200% 100%;
+    animation: bc-shimmer 1.5s infinite;
+    border-radius: 10px;
+  }
+
+  .bc-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--color-fg-tertiary);
+  }
+  .bc-empty-icon { margin-bottom: 12px; opacity: 0.4; }
+  .bc-empty-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--color-fg-secondary);
+    margin-bottom: 4px;
+  }
+  .bc-empty-text {
+    font-size: 14px;
+    color: var(--color-fg-tertiary);
+    max-width: 280px;
+  }
+
+  /* ---------- Progress bar ---------- */
+
+  .bc-progress-track {
+    height: 6px;
+    width: 100%;
+    background: var(--color-canvas);
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+
+  .bc-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: var(--color-bc-blue);
+    transition: width 0.8s ease-out;
+  }
+
+  /* ---------- Bento grid: 1 col, 2 at 640px, 4 at 768px ---------- */
+
+  .bento-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .bento-hero,
+  .bento-half,
+  .bento-third,
+  .bento-quarter,
+  .bento-full { grid-column: span 1; }
+
+  @media (min-width: 640px) {
+    .bento-grid { grid-template-columns: 1fr 1fr; }
+    .bento-hero { grid-column: span 2; }
+    .bento-half { grid-column: span 1; }
+    .bento-quarter { grid-column: span 1; }
+    .bento-third { grid-column: span 2; }
+    .bento-full { grid-column: span 2; }
+  }
+
+  @media (min-width: 768px) {
+    .bento-grid { grid-template-columns: repeat(4, 1fr); }
+    .bento-hero { grid-column: span 2; }
+    .bento-half { grid-column: span 2; }
+    .bento-quarter { grid-column: span 1; }
+    .bento-third { grid-column: span 1; }
+    .bento-full { grid-column: span 4; }
+  }
+
+  /* ---------- Show / hide by breakpoint ---------- */
+
+  @media (max-width: 639px) {
+    .hide-mobile { display: none !important; }
+  }
+
+  @media (min-width: 640px) {
+    .hide-desktop { display: none !important; }
+  }
 }
