@@ -141,4 +141,18 @@ export function forUser(userId: string) {
 }
 
 export type UserScopedDb = ReturnType<typeof forUser>;
+
+/**
+ * The client inside forUser(userId).$transaction(async (tx) => ...).
+ * Shared helpers that run inside a transaction take this type.
+ */
+export type ScopedTx = Omit<UserScopedDb, "$connect" | "$disconnect" | "$on" | "$transaction" | "$extends">;
+
+/**
+ * Unscoped client with the same TypeScript shape as forUser(), for admin
+ * repair jobs only (recomputeGoal). Never use it in user-facing code.
+ */
+export function adminDb() {
+  return prisma.$extends({ name: "admin" });
+}
 export { Prisma };
