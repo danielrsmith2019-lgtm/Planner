@@ -49,7 +49,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (signedIn && isAuthPage(pathname)) {
-    return redirectTo(new URL("/", request.url));
+    return redirectTo(new URL("/today", request.url));
   }
 
   return response;

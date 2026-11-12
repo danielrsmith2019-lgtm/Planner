@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, getLocalToday, isValidTimeZone, labelToMinutes, minutesToLabel, toDayNumber } from "./dates";
+import { addDays, formatDayLabel, getLocalMinute, getLocalToday, isValidTimeZone, labelToMinutes, minutesToLabel, toDayNumber } from "./dates";
 
 const NY = { timezone: "America/New_York", dayStartsAt: 240 };
 const at = (iso: string) => new Date(iso);
@@ -177,5 +177,31 @@ describe("isValidTimeZone", () => {
 
   it.each(["", "Mars/Olympus", "EST5EDT/garbage", "not a zone"])("rejects %j", (tz) => {
     expect(isValidTimeZone(tz)).toBe(false);
+  });
+});
+
+describe("getLocalMinute", () => {
+  it("reads the wall clock in the given zone", () => {
+    expect(getLocalMinute("America/New_York", new Date("2026-11-04T14:30:00Z"))).toBe(9 * 60 + 30); // EST
+    expect(getLocalMinute("America/New_York", new Date("2026-06-15T14:30:00Z"))).toBe(10 * 60 + 30); // EDT
+    expect(getLocalMinute("Asia/Tokyo", new Date("2026-06-15T14:30:00Z"))).toBe(23 * 60 + 30);
+  });
+
+  it("handles both DST transition mornings", () => {
+    expect(getLocalMinute("America/New_York", new Date("2026-03-08T07:30:00Z"))).toBe(3 * 60 + 30); // after spring forward
+    expect(getLocalMinute("America/New_York", new Date("2026-11-01T06:30:00Z"))).toBe(1 * 60 + 30); // second 1:30am
+  });
+
+  it("rejects unknown zones and invalid dates", () => {
+    expect(() => getLocalMinute("Mars/Olympus", new Date())).toThrow(RangeError);
+    expect(() => getLocalMinute("UTC", new Date("nope"))).toThrow(RangeError);
+  });
+});
+
+describe("formatDayLabel", () => {
+  it("formats a calendar day without shifting it", () => {
+    expect(formatDayLabel("2026-11-04")).toBe("Wed, Nov 4");
+    expect(formatDayLabel("2026-03-08")).toBe("Sun, Mar 8");
+    expect(formatDayLabel("2026-11-04", { short: true })).toBe("Nov 4");
   });
 });

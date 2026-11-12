@@ -4,6 +4,8 @@ import {
   CalendarClock,
   CalendarDays,
   Check,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   Mail,
   Minus,
@@ -13,6 +15,7 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  X,
   type LucideIcon,
   type LucideProps,
 } from "lucide-react";
@@ -36,6 +39,9 @@ export const ICONS = {
   flat: Minus,
   mail: Mail,
   signOut: LogOut,
+  previous: ChevronLeft,
+  next: ChevronRight,
+  close: X,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
@@ -77,6 +83,8 @@ export {
   CalendarClock,
   CalendarDays,
   Check,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   Mail,
   Minus,
@@ -86,4 +94,5 @@ export {
   Target,
   TrendingDown,
   TrendingUp,
+  X,
 };

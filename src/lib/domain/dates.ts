@@ -76,6 +76,28 @@ export function getLocalToday(user: DayBoundaryUser, now: Date): LocalDate {
   return minuteOfDay < dayStartsAt ? addDays(date, -1) : date;
 }
 
+/** Minutes after local midnight in the user's zone (0..1439), e.g. for getDefaultMode. */
+export function getLocalMinute(timezone: string, now: Date): number {
+  if (Number.isNaN(now.getTime())) throw new RangeError("now is an invalid Date");
+  let clock: string;
+  try {
+    clock = formatInTimeZone(now, timezone, "HH:mm");
+  } catch {
+    throw new RangeError(`Unknown time zone "${timezone}"`);
+  }
+  const [hours, minutes] = clock.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+const DAY_LABEL = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const SHORT_DAY_LABEL = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** "2026-11-04" -> "Wed, Nov 4" (or "Nov 4" with short). Timezone-free: it's a calendar day. */
+export function formatDayLabel(date: LocalDate, { short = false }: { short?: boolean } = {}): string {
+  const instant = new Date(toDayNumber(date) * MS_PER_DAY);
+  return (short ? SHORT_DAY_LABEL : DAY_LABEL).format(instant);
+}
+
 /** True for IANA zones this runtime knows, e.g. "America/New_York". */
 export function isValidTimeZone(timezone: string): boolean {
   if (typeof timezone !== "string" || timezone.trim() === "") return false;
