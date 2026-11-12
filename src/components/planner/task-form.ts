@@ -1,5 +1,5 @@
 import { addDays, toDayNumber, type LocalDate } from "@/lib/domain/dates";
-import type { GoalNode } from "@/lib/domain/goal-tree";
+import type { DayTask, GoalNode } from "@/lib/domain/goal-tree";
 import type { NewTaskValues } from "@/hooks/useTaskMutations";
 
 /**
@@ -43,12 +43,41 @@ export type TaskFormState = {
   pickedDate: string;
   durationMin: number;
   isTopThree: boolean;
+  /** True once the user changes the link (edit only sends the link then). */
+  linkChanged: boolean;
 };
 
 /** Start on the day being viewed: Today, Tomorrow, or that date picked. */
 export function initialTaskForm(today: LocalDate, viewing: LocalDate, isTopThree = false): TaskFormState {
   const dateChoice: DateChoice = viewing === today ? "today" : viewing === addDays(today, 1) ? "tomorrow" : "pick";
-  return { title: "", link: null, dateChoice, pickedDate: viewing, durationMin: 30, isTopThree };
+  return { title: "", link: null, dateChoice, pickedDate: viewing, durationMin: 30, isTopThree, linkChanged: false };
+}
+
+/** The link picker's option for a task's current goal / milestone, if it's in the tree. */
+export function linkOptionFor(goals: readonly GoalNode[], task: Pick<DayTask, "goalId" | "milestoneId">): LinkOption | null {
+  const goal = goals.find((g) => g.id === task.goalId);
+  if (goal === undefined) return null;
+  const milestone = goal.milestones.find((m) => m.id === task.milestoneId);
+  if (milestone !== undefined) {
+    return { kind: "milestone", goalId: goal.id, milestoneId: milestone.id, label: milestone.title, goalTitle: goal.title, color: goal.color };
+  }
+  return { kind: "goal", goalId: goal.id, label: goal.title, color: goal.color };
+}
+
+/** Edit: the form filled from an existing task. */
+export function taskFormFromTask(task: DayTask, today: LocalDate, goals: readonly GoalNode[]): TaskFormState {
+  const date = task.scheduledDate;
+  const dateChoice: DateChoice =
+    date === null ? "backlog" : date === today ? "today" : date === addDays(today, 1) ? "tomorrow" : "pick";
+  return {
+    title: task.title,
+    link: linkOptionFor(goals, task),
+    dateChoice,
+    pickedDate: date ?? today,
+    durationMin: task.durationMin ?? 30,
+    isTopThree: task.isTopThree,
+    linkChanged: false,
+  };
 }
 
 export function resolveDate(state: TaskFormState, today: LocalDate): LocalDate | null {

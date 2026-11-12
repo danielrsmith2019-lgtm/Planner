@@ -1,5 +1,6 @@
 "use client";
 
+import { useDraggable } from "@dnd-kit/core";
 import { formatDuration } from "@/lib/domain/day-lists";
 import { minutesToLabel } from "@/lib/domain/dates";
 import type { DayTask } from "@/lib/domain/goal-tree";
@@ -15,17 +16,42 @@ export default function TaskRow({
   goalColor,
   goalTitle,
   onToggle,
+  dragEnabled = false,
+  selected = false,
 }: {
   task: DayTask;
   /** Undefined for tasks with no goal. */
   goalColor?: string;
   goalTitle?: string;
   onToggle: (task: DayTask) => void;
+  /** Desktop: drag the row onto the timeline to give it a time ("backlog-task"). */
+  dragEnabled?: boolean;
+  /** Highlighted by J/K. */
+  selected?: boolean;
 }) {
+  const { setNodeRef, listeners, isDragging } = useDraggable({
+    id: `row:${task.id}`,
+    data: { type: "backlog-task", task },
+    disabled: !dragEnabled,
+  });
   const done = task.status === "DONE";
   const accent = goalColor ?? "var(--color-fg-tertiary)";
   return (
-    <li className="flex min-h-14 items-center gap-1 pr-3">
+    <li
+      ref={setNodeRef}
+      // Pointer only: the checkbox inside keeps the keyboard.
+      onPointerDown={(event) => {
+        const start: unknown = listeners?.onPointerDown;
+        if (typeof start === "function") start(event);
+      }}
+      data-task-id={task.id}
+      className={cn(
+        "flex min-h-14 items-center gap-1 pr-3",
+        dragEnabled && "cursor-grab touch-none active:cursor-grabbing",
+        isDragging && "opacity-40",
+        selected && "bg-bc-blue-light/60 shadow-[inset_3px_0_0_var(--color-bc-blue)]",
+      )}
+    >
       <button
         type="button"
         role="checkbox"

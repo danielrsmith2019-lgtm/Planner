@@ -109,3 +109,12 @@ export const resolveCarryOverInput = z.object({
 });
 
 export const monthInput = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM.") });
+
+export const updateTaskInput = z.object({
+  taskId: idSchema,
+  title: z.string().trim().min(1, "A title is required.").max(200).optional(),
+  link: taskLinkSchema.nullable().optional(),
+  scheduledDate: localDateSchema.nullable().optional(),
+  durationMin: z.number().int().min(1).max(1440).nullable().optional(),
+  isTopThree: z.boolean().optional(),
+});

@@ -12,6 +12,7 @@ import {
   scheduleTask,
   setTaskLink,
   uncompleteTask,
+  updateTask,
 } from "@/services/tasks";
 import type { TaskDTO } from "@/services/mappers";
 import { runAction } from "./result";
@@ -20,6 +21,7 @@ import {
   createTaskInput,
   logProgressInput,
   resolveCarryOverInput,
+  updateTaskInput,
   scheduleTaskInput,
   setTaskLinkInput,
   taskIdInput,
@@ -67,4 +69,9 @@ export async function getUnfinishedTasksAction(): Promise<ActionResult<Unfinishe
 /** Keep (to today), reschedule or drop (SKIPPED) each unfinished task. */
 export async function resolveCarryOverAction(input: unknown): Promise<ActionResult<CarryOverResolution>> {
   return runAction(resolveCarryOverInput, input, (user, decisions) => resolveCarryOver(user.id, decisions));
+}
+
+/** The edit sheet: title, link, day, duration and Top 3 in one call. */
+export async function updateTaskAction(input: unknown): Promise<ActionResult<TaskDTO>> {
+  return runAction(updateTaskInput, input, (user, { taskId, ...rest }) => updateTask(user.id, taskId, rest));
 }

@@ -38,6 +38,7 @@ export default function TaskForm({
   goals,
   defaultTopThree,
   topThreeFullOn,
+  initial,
   onSubmit,
 }: {
   id: string;
@@ -47,9 +48,11 @@ export default function TaskForm({
   defaultTopThree: boolean;
   /** The date shown on screen, if its Top 3 is already full. */
   topThreeFullOn: LocalDate | null;
-  onSubmit: (values: NewTaskValues) => void;
+  /** Edit: start from an existing task (taskFormFromTask). */
+  initial?: TaskFormState;
+  onSubmit: (values: NewTaskValues, meta: { linkChanged: boolean }) => void;
 }) {
-  const [state, setState] = useState<TaskFormState>(() => initialTaskForm(today, viewing, defaultTopThree));
+  const [state, setState] = useState<TaskFormState>(() => initial ?? initialTaskForm(today, viewing, defaultTopThree));
   const [errors, setErrors] = useState<TaskFormErrors>({});
   const set = <K extends keyof TaskFormState>(key: K, value: TaskFormState[K]) => setState((s) => ({ ...s, [key]: value }));
   const titleId = useId();
@@ -65,7 +68,7 @@ export default function TaskForm({
       setErrors(result.errors);
       return;
     }
-    onSubmit(result.values);
+    onSubmit(result.values, { linkChanged: state.linkChanged });
   };
 
   return (
@@ -90,7 +93,7 @@ export default function TaskForm({
         {errors.title !== undefined && <p className="text-[13px] font-medium text-bc-red-dark">{errors.title}</p>}
       </div>
 
-      <LinkPicker goals={goals} value={state.link} onChange={(link) => set("link", link)} />
+      <LinkPicker goals={goals} value={state.link} onChange={(link) => setState((s) => ({ ...s, link, linkChanged: true }))} />
 
       <fieldset className="flex flex-col gap-1.5">
         <legend className="bc-label mb-1.5 text-fg">When</legend>

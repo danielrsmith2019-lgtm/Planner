@@ -75,3 +75,31 @@ describe("validateTaskForm", () => {
     expect(validateTaskForm(initialTaskForm(today, today), today)).toMatchObject({ ok: false, errors: { title: "What's the task?" } });
   });
 });
+
+describe("taskFormFromTask", () => {
+  it("fills the edit form from a task, finding its milestone link", async () => {
+    const { taskFormFromTask } = await import("./task-form");
+    const state = taskFormFromTask(
+      {
+        id: "t",
+        goalId: "g1",
+        milestoneId: "m1",
+        title: "Draft bio",
+        notes: null,
+        status: "TODO",
+        isTopThree: true,
+        scheduledDate: "2026-11-13",
+        startMin: 540,
+        durationMin: 45,
+        contribution: null,
+        rank: "i0",
+        carryCount: 0,
+        completedAt: null,
+      },
+      "2026-11-12",
+      goals,
+    );
+    expect(state).toMatchObject({ title: "Draft bio", dateChoice: "tomorrow", durationMin: 45, isTopThree: true, linkChanged: false });
+    expect(state.link).toMatchObject({ kind: "milestone", milestoneId: "m1", goalTitle: "Launch portfolio site" });
+  });
+});

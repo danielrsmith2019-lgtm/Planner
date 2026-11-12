@@ -271,6 +271,73 @@ export async function setTaskLink(userId: string, taskId: string, link: TaskLink
 }
 
 // ---------------------------------------------------------------------------
+// Edit
+// ---------------------------------------------------------------------------
+
+export type UpdateTaskInput = {
+  title?: string;
+  /** null unlinks; omit to keep the current link. */
+  link?: TaskLink | null;
+  /** null moves the task to the backlog; omit to keep its day. */
+  scheduledDate?: LocalDate | null;
+  durationMin?: number | null;
+  isTopThree?: boolean;
+};
+
+/**
+ * The edit sheet's Save, in one transaction: title, goal / milestone link,
+ * day, duration and Top 3. Moving to another day clears the start time and
+ * appends the task to that day; the link change recomputes both the old and
+ * the new milestone and goal; Top 3 keeps the 3-per-day limit.
+ */
+export async function updateTask(userId: string, taskId: string, input: UpdateTaskInput): Promise<TaskDTO> {
+  const title = input.title?.trim();
+  if (title !== undefined && title === "") throw new ValidationError("A task needs a title.");
+  if (title !== undefined && title.length > 200) throw new ValidationError("Keep the title under 200 characters.");
+  if (input.scheduledDate !== undefined && input.scheduledDate !== null) assertLocalDate(input.scheduledDate, "scheduledDate");
+  if (input.durationMin !== undefined) assertDuration(input.durationMin);
+
+  return forUser(userId).$transaction(async (tx) => {
+    const existing = await tx.task.findUnique({ where: { id: taskId } });
+    if (existing === null) throw new NotFoundError("Task", taskId);
+
+    const currentDate = existing.scheduledDate === null ? null : toLocalDateString(existing.scheduledDate);
+    const nextDate = input.scheduledDate === undefined ? currentDate : input.scheduledDate;
+    const dayChanged = nextDate !== currentDate;
+    const link = input.link === undefined ? null : await resolveLink(tx, input.link);
+    const nextTopThree = (input.isTopThree ?? existing.isTopThree) && nextDate !== null;
+    if (nextTopThree && (!existing.isTopThree || dayChanged)) await assertTopThreeRoom(tx, nextDate, taskId);
+
+    let rank: string | undefined;
+    if (dayChanged) {
+      const last = await tx.task.findFirst({
+        where: { scheduledDate: nextDate === null ? null : fromLocalDate(nextDate), id: { not: taskId } },
+        orderBy: { rank: "desc" },
+        select: { rank: true },
+      });
+      rank = rankAfter(last?.rank ?? null);
+    }
+
+    const task = await tx.task.update({
+      where: { id: taskId },
+      data: {
+        ...(title === undefined ? {} : { title }),
+        ...(link === null ? {} : link),
+        ...(dayChanged ? { scheduledDate: nextDate === null ? null : fromLocalDate(nextDate), startMin: null, rank } : {}),
+        ...(input.durationMin === undefined ? {} : { durationMin: input.durationMin }),
+        isTopThree: nextTopThree,
+      },
+    });
+
+    if (link !== null && (link.goalId !== existing.goalId || link.milestoneId !== existing.milestoneId)) {
+      await recomputeFor(tx, existing.milestoneId, existing.goalId === link.goalId ? null : existing.goalId);
+      await recomputeFor(tx, link.milestoneId, link.goalId);
+    }
+    return toTaskDTO(task);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Scheduling
 // ---------------------------------------------------------------------------
 
