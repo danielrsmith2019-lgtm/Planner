@@ -73,3 +73,15 @@ describe("ui store", () => {
     expect(state().quickAddOpen).toBe(false);
   });
 });
+
+describe("timezone", () => {
+  it("keeps the timezone from syncClock", async () => {
+    const { create } = await import("zustand");
+    const { createUiState } = await import("./ui");
+    const store = create(createUiState);
+    store.getState().syncClock({ today: "2026-11-12", defaultMode: "do", timezone: "America/New_York" });
+    expect(store.getState()).toMatchObject({ timezone: "America/New_York", today: "2026-11-12", selectedDate: "2026-11-12" });
+    store.getState().syncClock({ today: "2026-11-12", defaultMode: "do" });
+    expect(store.getState().timezone).toBe("America/New_York");
+  });
+});

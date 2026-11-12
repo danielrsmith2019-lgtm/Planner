@@ -7,7 +7,7 @@ import BottomSheet from "@/components/shared/BottomSheet";
 import { useCompleteTask } from "@/hooks/useCompleteTask";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCreateTask, useResolveCarryOver } from "@/hooks/useTaskMutations";
-import { hasTopThreeRoom, MAX_TOP_THREE, splitDayTasks } from "@/lib/domain/day-lists";
+import { hasTopThreeRoom, MAX_TOP_THREE, splitForTimeline } from "@/lib/domain/day-lists";
 import { formatDayLabel, type LocalDate } from "@/lib/domain/dates";
 import type { DayData, DayTask, GoalNode } from "@/lib/domain/goal-tree";
 import { carryOverQuery } from "@/queries/carry-over";
@@ -15,7 +15,9 @@ import { dayQuery } from "@/queries/day";
 import { useUiStore } from "@/stores/ui";
 import { cn } from "@/utils/cn";
 import { Icon } from "@/utils/icons";
+import BacklogList from "./BacklogList";
 import CarryOverSheet from "./CarryOverSheet";
+import DailyTimeline from "./DailyTimeline";
 import GoalStrip, { type RingDelta } from "./GoalStrip";
 import TaskForm from "./TaskForm";
 import TaskRow from "./TaskRow";
@@ -23,7 +25,10 @@ import TaskRow from "./TaskRow";
 const TASK_FORM_ID = "new-task-form";
 const DELTA_VISIBLE_MS = 2200;
 
-/** Today (list version; the timeline arrives on Day 16). */
+/**
+ * Today: Top 3, an Anytime list, then the day timeline. 768px up the goals and
+ * backlog sit in a 240px column; 1024px up the journal is on the right.
+ */
 export default function TodayView() {
   const date = useUiStore((s) => s.selectedDate);
   const today = useUiStore((s) => s.today);
@@ -40,6 +45,7 @@ export default function TodayView() {
 
 function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
   const day = useQuery(dayQuery(date));
+  const timezone = useUiStore((s) => s.timezone);
   const isToday = date === today;
   const carryOver = useQuery({ ...carryOverQuery(), enabled: isToday });
   const complete = useCompleteTask();
@@ -78,7 +84,7 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
 
   const data: DayData = day.data;
   const goalById = new Map<string, GoalNode>(data.goalTree.map((g) => [g.id, g]));
-  const { topThree, rest } = splitDayTasks(data.tasks);
+  const { topThree, anytime, timed } = splitForTimeline(data.tasks);
   const unfinished = isToday && carryOver.isSuccess ? carryOver.data.tasks : [];
 
   const toggle = (task: DayTask) => {
@@ -110,10 +116,27 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
   };
 
   return (
-    <div className="flex flex-col gap-5 md:grid md:grid-cols-[208px_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[176px_minmax(0,1fr)_minmax(300px,360px)] lg:gap-5">
-      <aside className="md:sticky md:top-[calc(56px+var(--safe-top)+24px)]">
-        <h2 className="bc-section-label mb-1 hidden md:block">Goals</h2>
-        <GoalStrip goals={data.goalTree} delta={delta} />
+    <div
+      data-wide
+      className="flex flex-col gap-5 md:grid md:grid-cols-[240px_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[240px_minmax(0,1fr)_minmax(300px,360px)] lg:gap-5"
+    >
+      {/* Phones: goal strip on top. 768px up: goals, then the backlog, in a 240px column. */}
+      <aside className="flex flex-col gap-5 md:sticky md:top-[calc(56px+var(--safe-top)+24px)] md:max-h-[calc(100dvh-56px-var(--safe-top)-48px)] md:overflow-y-auto">
+        <div>
+          <h2 className="bc-section-label mb-1 hidden md:block">Goals</h2>
+          <GoalStrip goals={data.goalTree} delta={delta} />
+        </div>
+        <section aria-labelledby="backlog-rail-heading" className="hidden flex-col gap-2 md:flex">
+          <div className="flex min-h-11 items-center gap-2">
+            <h2 id="backlog-rail-heading" className="bc-section-label">
+              Backlog
+            </h2>
+            <span className="bc-caption">{data.backlog.length}</span>
+          </div>
+          <div className="bc-card-flush overflow-hidden">
+            <BacklogList tasks={data.backlog} goals={data.goalTree} onToggle={toggle} />
+          </div>
+        </section>
       </aside>
 
       <div className="flex min-w-0 flex-col gap-5">
@@ -164,8 +187,8 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
         </Section>
 
         <Section
-          title={isToday ? "Today" : formatDayLabel(date, { short: true })}
-          count={String(rest.length)}
+          title="Anytime"
+          count={String(anytime.length)}
           action={
             <button type="button" onClick={() => openForm(false)} className="flex min-h-11 items-center gap-1 px-2 text-[14px] font-semibold text-bc-blue">
               <Icon icon="add" size={16} />
@@ -173,14 +196,27 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
             </button>
           }
         >
-          {rest.length === 0 ? (
-            <p className="bc-label px-4 py-3">Nothing else scheduled.</p>
+          {anytime.length === 0 ? (
+            <p className="bc-label px-4 py-3">Nothing without a time on {isToday ? "today" : formatDayLabel(date, { short: true })}.</p>
           ) : (
-            <ul className="divide-y divide-border">{rest.map(rowFor)}</ul>
+            <ul className="divide-y divide-border">{anytime.map(rowFor)}</ul>
           )}
         </Section>
 
-        <section aria-labelledby="backlog-heading" className="flex flex-col gap-2">
+        <section aria-labelledby="timeline-heading" className="flex flex-col gap-2">
+          <div className="flex min-h-11 items-center gap-2">
+            <h2 id="timeline-heading" className="bc-section-label">
+              Timeline
+            </h2>
+            <span className="bc-caption">{timed.length}</span>
+          </div>
+          <div className="bc-card px-3 pt-1 pb-1">
+            <DailyTimeline tasks={timed} goals={data.goalTree} showNow={isToday} timezone={timezone} onToggle={toggle} />
+          </div>
+        </section>
+
+        {/* Phones: the backlog sits at the end, collapsed. */}
+        <section aria-labelledby="backlog-heading" className="flex flex-col gap-2 md:hidden">
           <button
             type="button"
             onClick={() => setBacklogOpen((v) => !v)}
@@ -196,11 +232,7 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
           </button>
           {backlogOpen && (
             <div id="backlog-list" className="bc-card-flush overflow-hidden">
-              {data.backlog.length === 0 ? (
-                <p className="bc-label px-4 py-3">No unscheduled tasks.</p>
-              ) : (
-                <ul className="divide-y divide-border">{data.backlog.map(rowFor)}</ul>
-              )}
+              <BacklogList tasks={data.backlog} goals={data.goalTree} onToggle={toggle} />
             </div>
           )}
         </section>

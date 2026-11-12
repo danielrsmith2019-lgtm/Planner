@@ -75,7 +75,7 @@ function WeekFor({ start, today }: { start: LocalDate; today: LocalDate }) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div data-wide className="flex flex-col gap-4">
       {notice !== null && (
         <div role="alert" className="flex items-start gap-2 rounded-[14px] bg-bc-red-light py-1 pr-1 pl-4 text-bc-red-dark">
           <p className="flex-1 py-2.5 text-[14px] font-medium">{notice}</p>

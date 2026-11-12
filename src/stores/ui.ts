@@ -16,13 +16,15 @@ export type UiState = {
   today: LocalDate | null;
   /** The day being viewed. */
   selectedDate: LocalDate | null;
+  /** The user's IANA timezone, for the timeline's now-line. */
+  timezone: string | null;
   mode: DayMode;
   /** True once the user picks a mode by hand; the clock stops changing it. */
   modeOverridden: boolean;
   quickAddOpen: boolean;
 
   /** Called on first load and whenever the app regains focus. */
-  syncClock: (clock: { today: LocalDate; defaultMode: DayMode }) => void;
+  syncClock: (clock: { today: LocalDate; defaultMode: DayMode; timezone?: string }) => void;
   setSelectedDate: (date: LocalDate) => void;
   shiftSelectedDate: (days: number) => void;
   goToToday: () => void;
@@ -35,27 +37,30 @@ export type UiState = {
 export const createUiState: StateCreator<UiState> = (set) => ({
   today: null,
   selectedDate: null,
+  timezone: null,
   mode: "plan",
   modeOverridden: false,
   quickAddOpen: false,
 
-  syncClock: ({ today, defaultMode }) =>
-    set((state) => {
+  syncClock: ({ today, defaultMode, timezone }) =>
+    set((base) => {
+      const state = timezone === undefined || base.timezone === timezone ? base : { ...base, timezone };
+      const withZone = (patch: Partial<UiState>): Partial<UiState> => (state === base ? patch : { timezone: state.timezone, ...patch });
       // First load.
       if (state.today === null) {
-        return { today, selectedDate: state.selectedDate ?? today, mode: state.modeOverridden ? state.mode : defaultMode };
+        return withZone({ today, selectedDate: state.selectedDate ?? today, mode: state.modeOverridden ? state.mode : defaultMode });
       }
       // The day rolled over while the app was open: follow it if the user
       // was looking at "today", and let the clock pick the mode again.
       if (state.today !== today) {
-        return {
+        return withZone({
           today,
           selectedDate: state.selectedDate === state.today ? today : state.selectedDate,
           mode: defaultMode,
           modeOverridden: false,
-        };
+        });
       }
-      return state.modeOverridden ? {} : { mode: defaultMode };
+      return withZone(state.modeOverridden ? {} : { mode: defaultMode });
     }),
 
   setSelectedDate: (date) => set({ selectedDate: date }),

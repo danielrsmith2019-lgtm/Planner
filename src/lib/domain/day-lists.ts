@@ -53,3 +53,24 @@ export function formatDuration(minutes: number): string {
 }
 
 export const DURATION_CHOICES = [15, 30, 45, 60, 90] as const;
+
+export type TimelineLists = {
+  /** Same as splitDayTasks: up to three flagged tasks. */
+  topThree: DayTask[];
+  /** Dated but not time-blocked, and not in Top 3 (rank order). */
+  anytime: DayTask[];
+  /** Time-blocked tasks, Top 3 included, for the timeline grid. */
+  timed: (DayTask & { startMin: number })[];
+};
+
+/** Today with a timeline: Top 3, an Anytime list, and the timed blocks. */
+export function splitForTimeline(tasks: readonly DayTask[]): TimelineLists {
+  const { topThree } = splitDayTasks(tasks);
+  const topIds = new Set(topThree.map((t) => t.id));
+  const visible = tasks.filter((t) => t.status !== "SKIPPED");
+  const timed = visible.filter((t): t is DayTask & { startMin: number } => t.startMin !== null).sort(compareByStartThenRank);
+  const anytime = visible
+    .filter((t) => t.startMin === null && !topIds.has(t.id))
+    .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+  return { topThree, anytime, timed };
+}

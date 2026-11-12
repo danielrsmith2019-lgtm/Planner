@@ -29,6 +29,7 @@ export default function Header({ user }: { user: HeaderUser }) {
       syncClock({
         today: getLocalToday(user, now),
         defaultMode: getDefaultMode(getLocalMinute(user.timezone, now), user.dayStartsAt),
+        timezone: user.timezone,
       });
     };
     sync();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration, hasTopThreeRoom, splitDayTasks } from "./day-lists";
+import { formatDuration, hasTopThreeRoom, splitDayTasks, splitForTimeline } from "./day-lists";
 import type { DayTask } from "./goal-tree";
 
 const t = (id: string, o: Partial<DayTask> = {}): DayTask => ({
@@ -59,5 +59,21 @@ describe("hasTopThreeRoom", () => {
 describe("formatDuration", () => {
   it("formats minutes", () => {
     expect([15, 60, 90, 120].map(formatDuration)).toEqual(["15m", "1h", "1h 30m", "2h"]);
+  });
+});
+
+describe("splitForTimeline", () => {
+  it("timed tasks go to the grid (Top 3 included), untimed non-Top 3 tasks to Anytime", () => {
+    const lists = splitForTimeline([
+      t("late", { startMin: 900 }),
+      t("any2"),
+      t("top-timed", { isTopThree: true, startMin: 480 }),
+      t("top-any", { isTopThree: true }),
+      t("any1"),
+      t("skipped", { startMin: 600, status: "SKIPPED" }),
+    ]);
+    expect(lists.topThree.map((x) => x.id)).toEqual(["top-any", "top-timed"]);
+    expect(lists.timed.map((x) => x.id)).toEqual(["top-timed", "late"]);
+    expect(lists.anytime.map((x) => x.id)).toEqual(["any1", "any2"]);
   });
 });
