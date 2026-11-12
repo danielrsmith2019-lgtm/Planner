@@ -40,6 +40,11 @@ export function initialSchedule(task: DayTask, today: LocalDate): ScheduleState 
   };
 }
 
+/** "Schedule next step": Next free slot today, keeping the task's duration. */
+export function nextFreeTodaySchedule(task: DayTask, today: LocalDate): ScheduleState {
+  return { ...initialSchedule(task, today), time: "next", date: "today", pickedDate: today };
+}
+
 export function targetDate(state: ScheduleState, today: LocalDate): LocalDate {
   if (state.date === "today") return today;
   if (state.date === "tomorrow") return addDays(today, 1);

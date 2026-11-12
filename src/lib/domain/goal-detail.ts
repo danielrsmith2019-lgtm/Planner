@@ -8,6 +8,7 @@ import {
   type GoalNode,
   type MilestoneNode,
 } from "./goal-tree";
+import { paceFromExpected } from "./pace";
 import { computeMilestoneProgress, type MilestoneStatus, type TaskStatus } from "./progress";
 
 /**
@@ -88,6 +89,7 @@ export function applyServerCompletionToGoalDetail(
     ...withTask,
     progress: result.goal.progress,
     metricCurrent: result.goal.metricCurrent,
+    pace: paceFromExpected(result.goal.progress, detail.expectedProgress),
     milestones: withTask.milestones.map((m) =>
       milestone !== null && m.id === milestone.id ? { ...m, status: milestone.status, progress: milestone.progress } : m,
     ),

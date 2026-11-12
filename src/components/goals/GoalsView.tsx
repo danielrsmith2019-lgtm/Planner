@@ -21,6 +21,7 @@ import { useUiStore } from "@/stores/ui";
 import { Icon } from "@/utils/icons";
 import GoalCard from "./GoalCard";
 import GoalForm from "./GoalForm";
+import { useScheduleNextStep } from "./useScheduleNextStep";
 import { fromServerFieldErrors, type GoalFormErrors } from "./goal-form";
 
 const FORM_ID = "new-goal-form";
@@ -29,6 +30,8 @@ const FORM_ID = "new-goal-form";
 export default function GoalsView() {
   const goals = useQuery(goalsQuery());
   const today = useUiStore((s) => s.today);
+  const timezone = useUiStore((s) => s.timezone);
+  const nextStep = useScheduleNextStep(today, timezone);
   const createGoal = useCreateGoal();
   const setStatus = useSetGoalStatus();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -78,13 +81,16 @@ export default function GoalsView() {
         </button>
       </div>
 
-      {notice !== null && (
+      {(notice ?? nextStep.error) !== null && (
         <div role="alert" className="flex items-start gap-2 rounded-[14px] bg-bc-orange-light py-1 pr-1 pl-4 text-bc-orange-dark">
-          <p className="flex-1 py-2.5 text-[14px] font-medium">{notice}</p>
+          <p className="flex-1 py-2.5 text-[14px] font-medium">{notice ?? nextStep.error}</p>
           <button
             type="button"
             aria-label="Dismiss"
-            onClick={() => setNotice(null)}
+            onClick={() => {
+              setNotice(null);
+              nextStep.clearError();
+            }}
             className="flex size-11 shrink-0 items-center justify-center rounded-full"
           >
             <Icon icon="close" size={18} />
@@ -125,7 +131,13 @@ export default function GoalsView() {
           </h2>
           <div className="bento-grid">
             {section.goals.map((goal) => (
-              <GoalCard key={goal.id} goal={goal} onStatusChange={changeStatus} />
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                onStatusChange={changeStatus}
+                onScheduleNextStep={today === null ? undefined : (g) => nextStep.start(g.id)}
+                scheduling={nextStep.loadingGoalId === goal.id}
+              />
             ))}
           </div>
         </section>
@@ -158,6 +170,8 @@ export default function GoalsView() {
           onSubmit={submit}
         />
       </BottomSheet>
+
+      {nextStep.sheets}
     </div>
   );
 }

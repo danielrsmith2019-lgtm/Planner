@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AHEAD_MARGIN, BEHIND_MARGIN, computeExpectedProgress, computePace } from "./pace";
+import { AHEAD_MARGIN, BEHIND_MARGIN, computeExpectedProgress, computePace, paceFromExpected } from "./pace";
 
 // 10-day window; on Jan 6 the goal should be exactly half done.
 const HALFWAY = { startDate: "2026-01-01", targetDate: "2026-01-11", today: "2026-01-06" } as const;
@@ -105,5 +105,17 @@ describe("computePace", () => {
 
   it("is on track at 0 before the start date", () => {
     expect(computePace({ ...HALFWAY, today: "2025-12-25", progress: 0 })).toBe("on_track");
+  });
+});
+
+describe("paceFromExpected", () => {
+  it("matches computePace for the same expected value", () => {
+    for (const progress of [0, 0.3, 0.39, 0.4, 0.5, 0.55, 0.9]) {
+      expect(paceFromExpected(progress, 0.5)).toBe(computePace({ ...HALFWAY, progress }));
+    }
+  });
+
+  it("is null without an expected value", () => {
+    expect(paceFromExpected(0.5, null)).toBeNull();
   });
 });

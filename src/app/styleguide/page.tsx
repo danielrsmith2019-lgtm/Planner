@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import GoalWidgetExamples from "@/components/goals/GoalWidgetExamples";
 import GoalRing from "@/components/shared/GoalRing";
 import Metric, { MetricRow } from "@/components/shared/Metric";
 import { GOAL_COLORS, GOAL_PALETTE } from "@/lib/domain/goal-colors";
@@ -287,6 +288,10 @@ export default function StyleguidePage() {
             </div>
             <p className="bc-caption">Strip row: 48px rings. The orange ring shows the stalled dot.</p>
           </div>
+        </Section>
+
+        <Section title="Goal progress widget">
+          <GoalWidgetExamples />
         </Section>
 
         <Section title="Progress bars">

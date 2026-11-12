@@ -4,6 +4,9 @@ import { seedGoal, seedUser } from "../../test/seed";
 import { getWeek } from "./day";
 import { createTask, scheduleTask } from "./tasks";
 
+/** A week before MON, so moves inside the week never change a goal's stalled state. */
+const BEFORE_WEEK = new Date("2026-11-01T12:00:00Z");
+
 const MON = "2026-11-09";
 
 async function setup() {
@@ -20,7 +23,7 @@ async function setup() {
 describe("getWeek", () => {
   it("returns 7 days of tasks from Monday in rank order, plus the goal tree", async () => {
     const s = await setup();
-    const week = await getWeek(s.user.id, MON);
+    const week = await getWeek(s.user.id, MON, { now: BEFORE_WEEK });
     expect(week.days.map((d) => d.date)).toEqual([
       "2026-11-09",
       "2026-11-10",
@@ -38,27 +41,27 @@ describe("getWeek", () => {
 
   it("an optimistic move matches the server after scheduleTask", async () => {
     const s = await setup();
-    let cached = await getWeek(s.user.id, MON);
+    let cached = await getWeek(s.user.id, MON, { now: BEFORE_WEEK });
 
     const across = planWeekMove(cached, s.b.id, "2026-11-11", s.c.id);
     if (across === null) throw new Error("expected a move");
     cached = applyWeekMove(cached, across);
     await scheduleTask(s.user.id, s.b.id, { scheduledDate: across.toDate, startMin: null, durationMin: 30, rank: across.rank });
-    expect(cached).toEqual(await getWeek(s.user.id, MON));
+    expect(cached).toEqual(await getWeek(s.user.id, MON, { now: BEFORE_WEEK }));
     expect(cached.days[2].tasks.map((t) => t.title)).toEqual(["b", "c"]);
 
     const within = planWeekMove(cached, s.b.id, "2026-11-11", s.c.id);
     if (within === null) throw new Error("expected a move");
     cached = applyWeekMove(cached, within);
     await scheduleTask(s.user.id, s.b.id, { scheduledDate: within.toDate, startMin: null, durationMin: 30, rank: within.rank });
-    expect(cached).toEqual(await getWeek(s.user.id, MON));
+    expect(cached).toEqual(await getWeek(s.user.id, MON, { now: BEFORE_WEEK }));
     expect(cached.days[2].tasks.map((t) => t.title)).toEqual(["c", "b"]);
 
     const end = planMoveToEnd(cached, s.a.id, "2026-11-15");
     if (end === null) throw new Error("expected a move");
     cached = applyWeekMove(cached, end);
     await scheduleTask(s.user.id, s.a.id, { scheduledDate: end.toDate, startMin: null, durationMin: 30, rank: end.rank });
-    expect(cached).toEqual(await getWeek(s.user.id, MON));
+    expect(cached).toEqual(await getWeek(s.user.id, MON, { now: BEFORE_WEEK }));
   });
 });
 

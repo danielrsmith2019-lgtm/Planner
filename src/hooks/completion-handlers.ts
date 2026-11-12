@@ -37,6 +37,8 @@ export type CompletionContext = {
   touched: Touched[];
   /** What the client predicted the goal would move by. */
   optimisticDelta: number;
+  /** The goal and its progress before this change, when the prediction moved it up (for the ring animation). */
+  rise: { goalId: string; before: number } | null;
 };
 
 export type RunCompletion = (variables: CompletionVariables) => Promise<CompletionResult>;
@@ -95,6 +97,7 @@ export function createCompletionHandlers(
       const now = clock();
       const touched: Touched[] = [];
       let optimisticDelta = 0;
+      let rise: CompletionContext["rise"] = null;
       for (const key of keys) {
         if (key[0] === "day") {
           const before = queryClient.getQueryData<DayData>(key);
@@ -104,6 +107,8 @@ export function createCompletionHandlers(
           queryClient.setQueryData(key, result.day);
           touched.push({ kind: "day", key, before, after: result.day });
           optimisticDelta = result.delta;
+          const goal = before.goalTree.find((g) => g.id === result.goalId);
+          if (rise === null && result.delta > 0 && goal !== undefined) rise = { goalId: goal.id, before: goal.progress };
         } else {
           const before = queryClient.getQueryData<GoalDetailData>(key);
           if (before === undefined) continue;
@@ -112,9 +117,10 @@ export function createCompletionHandlers(
           queryClient.setQueryData(key, result.detail);
           touched.push({ kind: "goal", key, before, after: result.detail });
           optimisticDelta = result.delta;
+          if (rise === null && result.delta > 0) rise = { goalId: before.id, before: before.progress };
         }
       }
-      return { touched, optimisticDelta };
+      return { touched, optimisticDelta, rise };
     },
 
     onError(_error: Error, { taskId, direction }: CompletionVariables, context: CompletionContext | undefined) {

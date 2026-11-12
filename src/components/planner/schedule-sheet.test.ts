@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DayTask } from "@/lib/domain/goal-tree";
-import { initialSchedule, resolveStart, toPlacement, type ScheduleState } from "./schedule-sheet";
+import { initialSchedule, nextFreeTodaySchedule, resolveStart, toPlacement, type ScheduleState } from "./schedule-sheet";
 
 const task = (o: Partial<DayTask> = {}): DayTask => ({
   id: "t",
@@ -34,6 +34,15 @@ describe("schedule sheet", () => {
       time: "pick",
       pickedTime: "09:30",
       date: "tomorrow",
+    });
+  });
+
+  it("Schedule next step opens on Next free slot today even for a task placed elsewhere", () => {
+    expect(nextFreeTodaySchedule(task({ scheduledDate: "2026-12-01", startMin: 570 }), TODAY)).toMatchObject({
+      time: "next",
+      date: "today",
+      pickedDate: TODAY,
+      durationMin: 45,
     });
   });
 

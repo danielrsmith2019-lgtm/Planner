@@ -11,6 +11,7 @@ import { dayQuery } from "@/queries/day";
 import { cn } from "@/utils/cn";
 import {
   initialSchedule,
+  nextFreeTodaySchedule,
   resolveStart,
   targetDate,
   toPlacement,
@@ -53,6 +54,8 @@ type SheetProps = {
   onSave: (task: DayTask, placement: Placement) => void;
   /** Timed blocks open this sheet on phones, so it also offers done / not done. */
   onToggleDone?: (task: DayTask) => void;
+  /** Open on "Next free slot" today instead of the task's current placement. */
+  startAtNextFreeToday?: boolean;
 };
 
 /**
@@ -73,8 +76,18 @@ export default function ScheduleSheet({ task, ...props }: SheetProps) {
   return <ScheduleForm key={task.id} task={task} {...props} />;
 }
 
-function ScheduleForm({ task, today, timezone, onOpenChange, onSave, onToggleDone }: SheetProps & { task: DayTask }) {
-  const [state, setState] = useState<ScheduleState>(() => initialSchedule(task, today));
+function ScheduleForm({
+  task,
+  today,
+  timezone,
+  onOpenChange,
+  onSave,
+  onToggleDone,
+  startAtNextFreeToday = false,
+}: SheetProps & { task: DayTask }) {
+  const [state, setState] = useState<ScheduleState>(() =>
+    startAtNextFreeToday ? nextFreeTodaySchedule(task, today) : initialSchedule(task, today),
+  );
   const [now] = useState(() => nowMinute(timezone));
   const set = <K extends keyof ScheduleState>(key: K, value: ScheduleState[K]) => setState((s) => ({ ...s, [key]: value }));
 

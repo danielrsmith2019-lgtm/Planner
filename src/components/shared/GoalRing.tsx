@@ -6,6 +6,7 @@
  * No hooks, so it works in Server and Client Components.
  */
 
+import type { CSSProperties } from "react";
 import { GOAL_COLORS } from "@/lib/domain/goal-colors";
 
 export type GoalRingProps = {
@@ -22,6 +23,12 @@ export type GoalRingProps = {
   sublabel?: string;
   /** Small orange dot for stalled goals. */
   stalled?: boolean;
+  /**
+   * Sweep from this value (0..1) to progress once, with the goal-ring-sweep
+   * keyframes. Change sweepKey to replay. Reduced motion skips the sweep.
+   */
+  sweepFrom?: number;
+  sweepKey?: number;
   className?: string;
 };
 
@@ -34,6 +41,8 @@ export default function GoalRing({
   label,
   sublabel,
   stalled = false,
+  sweepFrom,
+  sweepKey,
   className = "",
 }: GoalRingProps) {
   const stroke = strokeWidth ?? (size >= 72 ? 6 : size >= 56 ? 5 : 4);
@@ -41,6 +50,8 @@ export default function GoalRing({
   const circumference = radius * 2 * Math.PI;
   const clamped = Math.min(Math.max(progress, 0), 1);
   const offset = circumference * (1 - clamped);
+  const sweeping = sweepFrom !== undefined;
+  const fromOffset = circumference * (1 - Math.min(Math.max(sweepFrom ?? clamped, 0), 1));
   const percent = Math.round(clamped * 100);
   const valueSize = size >= 96 ? 20 : size >= 72 ? 14 : 12;
 
@@ -55,6 +66,8 @@ export default function GoalRing({
         <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
           <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#F2F2F7" strokeWidth={stroke} />
           <circle
+            // A new key restarts the sweep.
+            key={sweeping ? `sweep-${sweepKey ?? 0}` : "ring"}
             cx={size / 2}
             cy={size / 2}
             r={radius}
@@ -64,7 +77,12 @@ export default function GoalRing({
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            style={{ transition: "stroke-dashoffset 0.8s ease-out" }}
+            className={sweeping ? "goal-ring-sweep" : undefined}
+            style={
+              sweeping
+                ? ({ "--ring-from": fromOffset, "--ring-to": offset } as CSSProperties)
+                : { transition: "stroke-dashoffset 0.8s ease-out" }
+            }
           />
         </svg>
 

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import type { GoalDetailData } from "@/lib/domain/goal-detail";
-import { getGoalDetail, listGoals, type GoalSummary } from "@/services/day";
+import { findNextStep, getGoalDetail, listGoals, type GoalSummary, type NextStepResult } from "@/services/day";
 import { createGoal, setGoalStatus } from "@/services/goals";
 import type { GoalDTO } from "@/services/mappers";
 import { runAction } from "./result";
@@ -26,4 +26,9 @@ export async function getGoalsAction(): Promise<ActionResult<GoalSummary[]>> {
 
 export async function getGoalAction(input: { goalId: string }): Promise<ActionResult<GoalDetailData>> {
   return runAction(goalIdInput, input, (user, { goalId }) => getGoalDetail(user.id, goalId));
+}
+
+/** "Schedule next step": the task to schedule, or what to create (findNextStep). */
+export async function getNextStepAction(input: { goalId: string }): Promise<ActionResult<NextStepResult>> {
+  return runAction(goalIdInput, input, (user, { goalId }) => findNextStep(user.id, goalId));
 }

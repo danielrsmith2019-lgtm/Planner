@@ -1,4 +1,6 @@
 import type { LocalDate } from "./dates";
+import type { GoalHealth } from "./goal-health";
+import { paceFromExpected } from "./pace";
 import type { GoalStatus } from "./stalled";
 import {
   computeMetricProgress,
@@ -28,7 +30,12 @@ export type MilestoneNode = {
   counts: TaskCounts;
 };
 
-export type GoalNode = {
+/**
+ * One goal in the day's tree. pace, expectedProgress and isStalled come from
+ * the server (computeGoalHealth); the optimistic updates below redo the pace
+ * when progress moves. isStalled changes only on refetch.
+ */
+export type GoalNode = GoalHealth & {
   id: string;
   title: string;
   color: string;
@@ -128,14 +135,15 @@ export function applyStatusChangeToGoal<M extends MilestoneNode, G extends GoalL
     metricCurrent = roundToCents(metricCurrent + sign * amount);
     progress = computeMetricProgress(metricCurrent, goal.metricTarget);
   }
-  return { goal: { ...goal, milestones, progress, metricCurrent }, delta: progress - goal.progress };
+  const pace = paceFromExpected(progress, goal.expectedProgress);
+  return { goal: { ...goal, milestones, progress, metricCurrent, pace }, delta: progress - goal.progress };
 }
 
 /** Recompute a goal after one of its milestones changed (status or weight). */
 export function recomputeGoalFromMilestones<M extends MilestoneNode, G extends GoalLike<M>>(goal: G, milestones: M[]): G {
   // In METRIC mode milestones are informational; progress comes from contributions.
   const progress = goal.progressMode === "MILESTONES" ? computeMilestonesGoalProgress(milestones) : goal.progress;
-  return { ...goal, milestones, progress };
+  return { ...goal, milestones, progress, pace: paceFromExpected(progress, goal.expectedProgress) };
 }
 
 /** The task's next status, or null when the call would change nothing (same rule as the server). */
@@ -198,6 +206,7 @@ export function applyServerCompletion(day: DayData, result: ServerCompletion): D
         ...goal,
         progress: result.goal.progress,
         metricCurrent: result.goal.metricCurrent,
+        pace: paceFromExpected(result.goal.progress, goal.expectedProgress),
         milestones: goal.milestones.map((m) =>
           result.milestone !== null && m.id === result.milestone.id
             ? { ...m, status: result.milestone.status, progress: result.milestone.progress }

@@ -48,11 +48,18 @@ export function computeExpectedProgress({ startDate, targetDate, today }: Expect
   return expected >= 1 ? 1 : expected;
 }
 
-export function computePace(input: PaceInput): PaceStatus | null {
-  const expected = computeExpectedProgress(input);
+/**
+ * Pace from a progress value and an already computed expected progress.
+ * The server sends expectedProgress with each goal, so the client can redo
+ * this after an optimistic progress change without knowing today's date.
+ */
+export function paceFromExpected(progress: number, expected: number | null): PaceStatus | null {
   if (expected === null) return null;
-
-  if (input.progress >= expected + AHEAD_MARGIN - EPSILON) return "ahead";
-  if (input.progress < expected - BEHIND_MARGIN - EPSILON) return "behind";
+  if (progress >= expected + AHEAD_MARGIN - EPSILON) return "ahead";
+  if (progress < expected - BEHIND_MARGIN - EPSILON) return "behind";
   return "on_track";
+}
+
+export function computePace(input: PaceInput): PaceStatus | null {
+  return paceFromExpected(input.progress, computeExpectedProgress(input));
 }

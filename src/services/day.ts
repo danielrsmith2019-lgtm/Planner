@@ -1,13 +1,24 @@
 import "server-only";
 
 import { forUser } from "@/lib/db";
+import { addDays, getLocalToday, type LocalDate } from "@/lib/domain/dates";
 import type { GoalDetailData } from "@/lib/domain/goal-detail";
+import { computeGoalHealth, pickNextStep, sortByHealth, type GoalHealth, type NextStep } from "@/lib/domain/goal-health";
+import { STALLED_WINDOW_DAYS } from "@/lib/domain/stalled";
 import type { DayData, GoalNode, MilestoneNode, TaskCounts } from "@/lib/domain/goal-tree";
 import { weekDates } from "@/lib/domain/week";
 import type { WeekData } from "@/lib/domain/week-board";
-import type { LocalDate } from "@/lib/domain/dates";
 import type { Tx } from "./goals";
-import { fromLocalDate, toGoalDTO, toMilestoneDTO, toTaskDTO, type GoalDTO, type MilestoneDTO } from "./mappers";
+import {
+  fromLocalDate,
+  toGoalDTO,
+  toLocalDate,
+  toMilestoneDTO,
+  toTaskDTO,
+  type GoalDTO,
+  type MilestoneDTO,
+  type TaskDTO,
+} from "./mappers";
 import { NotFoundError } from "./errors";
 
 /**
@@ -17,7 +28,53 @@ import { NotFoundError } from "./errors";
  * plus a slim goal tree (goals -> milestones -> task counts). The counts cover
  * every task of each milestone, not just the day's, because milestone progress
  * is computed from all of them.
+ *
+ * Every goal these return carries its health (pace, expectedProgress,
+ * isStalled from computeGoalHealth, against the user's local today), and
+ * goal lists come back in health order: stalled, behind, on track, ahead.
  */
+
+/** Pass now to pin "today" in tests; defaults to the current time. */
+export type ReadOptions = { now?: Date };
+
+const NO_HEALTH: GoalHealth = { pace: null, expectedProgress: null, isStalled: false };
+
+/** The user's local today (getLocalToday), read inside the caller's transaction. */
+async function localTodayInTx(tx: Tx, userId: string, now: Date): Promise<LocalDate> {
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { timezone: true, dayStartsAt: true } });
+  if (user === null) throw new NotFoundError("User", userId);
+  return getLocalToday(user, now);
+}
+
+/**
+ * Pace and stalled state for each goal, with one query for the TODO tasks
+ * scheduled in the stalled window (today through today + 7).
+ */
+async function healthInTx(
+  tx: Tx,
+  userId: string,
+  goals: readonly GoalDTO[],
+  now: Date,
+): Promise<Map<string, GoalHealth>> {
+  const health = new Map<string, GoalHealth>();
+  if (goals.length === 0) return health;
+  const today = await localTodayInTx(tx, userId, now);
+  const upcoming = await tx.task.findMany({
+    where: {
+      goalId: { in: goals.map((g) => g.id) },
+      status: "TODO",
+      scheduledDate: { gte: fromLocalDate(today), lte: fromLocalDate(addDays(today, STALLED_WINDOW_DAYS)) },
+    },
+    select: { goalId: true, status: true, scheduledDate: true },
+  });
+  const tasks = upcoming.map((t) => ({
+    goalId: t.goalId,
+    status: t.status,
+    scheduledDate: t.scheduledDate === null ? null : toLocalDate(t.scheduledDate),
+  }));
+  for (const goal of goals) health.set(goal.id, computeGoalHealth(goal, tasks, today));
+  return health;
+}
 
 const EMPTY_COUNTS: TaskCounts = { todo: 0, done: 0, skipped: 0 };
 
@@ -48,8 +105,9 @@ function toMilestoneNode(m: MilestoneWithCounts): MilestoneNode {
   return { id: m.id, title: m.title, status: m.status, weight: m.weight, progress: m.progress, counts: m.counts };
 }
 
-function toGoalNode(goal: GoalDTO, milestones: MilestoneWithCounts[]): GoalNode {
+function toGoalNode(goal: GoalDTO, milestones: MilestoneWithCounts[], health: GoalHealth): GoalNode {
   return {
+    ...health,
     id: goal.id,
     title: goal.title,
     color: goal.color,
@@ -74,30 +132,43 @@ async function milestonesWithCounts(tx: Tx, goalIds: string[]): Promise<Mileston
 }
 
 /**
- * The day's tasks (ordered by rank), the backlog (unscheduled TODO tasks) and
- * the goal tree: every ACTIVE goal, plus any other goal one of those tasks
- * points at (e.g. a paused goal).
+ * Every ACTIVE goal plus any goal the given tasks point at (e.g. a paused
+ * goal), with milestone counts and health, in health order.
  */
-/** Every ACTIVE goal plus any goal the given tasks point at, with milestone counts. */
-async function buildGoalTree(tx: Tx, tasks: readonly { goalId: string | null }[]): Promise<GoalNode[]> {
+async function buildGoalTree(
+  tx: Tx,
+  userId: string,
+  tasks: readonly { goalId: string | null }[],
+  now: Date,
+): Promise<GoalNode[]> {
   const linkedGoalIds = [...new Set(tasks.flatMap((t) => (t.goalId === null ? [] : [t.goalId])))];
-  const goals = await tx.goal.findMany({
-    where: { OR: [{ status: "ACTIVE" }, { id: { in: linkedGoalIds } }] },
-    orderBy: { rank: "asc" },
-  });
+  const goals = (
+    await tx.goal.findMany({
+      where: { OR: [{ status: "ACTIVE" }, { id: { in: linkedGoalIds } }] },
+      orderBy: { rank: "asc" },
+    })
+  ).map(toGoalDTO);
   const milestones = await milestonesWithCounts(
     tx,
     goals.map((g) => g.id),
   );
-  return goals.map((g) =>
-    toGoalNode(
-      toGoalDTO(g),
-      milestones.filter((m) => m.goalId === g.id),
+  const health = await healthInTx(tx, userId, goals, now);
+  return sortByHealth(
+    goals.map((g) =>
+      toGoalNode(
+        g,
+        milestones.filter((m) => m.goalId === g.id),
+        health.get(g.id) ?? NO_HEALTH,
+      ),
     ),
   );
 }
 
-export async function getDay(userId: string, date: LocalDate): Promise<DayData> {
+/**
+ * The day's tasks (ordered by rank), the backlog (unscheduled TODO tasks) and
+ * the goal tree (buildGoalTree).
+ */
+export async function getDay(userId: string, date: LocalDate, { now = new Date() }: ReadOptions = {}): Promise<DayData> {
   const day = fromLocalDate(date);
   return forUser(userId).$transaction(async (tx) => {
     const tasks = await tx.task.findMany({ where: { scheduledDate: day }, orderBy: { rank: "asc" } });
@@ -110,7 +181,7 @@ export async function getDay(userId: string, date: LocalDate): Promise<DayData> 
       date,
       tasks: tasks.map(toTaskDTO),
       backlog: backlog.map(toTaskDTO),
-      goalTree: await buildGoalTree(tx, [...tasks, ...backlog]),
+      goalTree: await buildGoalTree(tx, userId, [...tasks, ...backlog], now),
     };
   });
 }
@@ -119,7 +190,11 @@ export async function getDay(userId: string, date: LocalDate): Promise<DayData> 
  * Seven days of tasks from startDate (a Monday on the client) in one request,
  * each day in rank order, plus the goal tree for colors and the task form.
  */
-export async function getWeek(userId: string, startDate: LocalDate): Promise<WeekData> {
+export async function getWeek(
+  userId: string,
+  startDate: LocalDate,
+  { now = new Date() }: ReadOptions = {},
+): Promise<WeekData> {
   const start = fromLocalDate(startDate);
   const dates = weekDates(startDate);
   const end = fromLocalDate(dates[6] ?? startDate);
@@ -130,35 +205,45 @@ export async function getWeek(userId: string, startDate: LocalDate): Promise<Wee
     return {
       startDate,
       days: dates.map((date) => ({ date, tasks: tasks.filter((t) => t.scheduledDate === date) })),
-      goalTree: await buildGoalTree(tx, tasks),
+      goalTree: await buildGoalTree(tx, userId, tasks, now),
     };
   });
 }
 
-export type GoalSummary = GoalDTO & {
+export type GoalSummary = GoalDTO &
+  GoalHealth & {
   /** The first OPEN milestone in rank order, for "Next: ..." on the card. */
   nextMilestone: { id: string; title: string } | null;
   milestoneCount: number;
 };
 
-/** Goals list: everything but ARCHIVED, in rank order, with each goal's next milestone. */
-export async function listGoals(userId: string): Promise<GoalSummary[]> {
+/**
+ * Goals list: everything but ARCHIVED, with each goal's next milestone and
+ * health, in health order (rank order between goals with the same health).
+ */
+export async function listGoals(userId: string, { now = new Date() }: ReadOptions = {}): Promise<GoalSummary[]> {
   return forUser(userId).$transaction(async (tx) => {
-    const goals = await tx.goal.findMany({ where: { status: { not: "ARCHIVED" } }, orderBy: { rank: "asc" } });
+    const goals = (
+      await tx.goal.findMany({ where: { status: { not: "ARCHIVED" } }, orderBy: { rank: "asc" } })
+    ).map(toGoalDTO);
     const milestones = await tx.milestone.findMany({
       where: { goalId: { in: goals.map((g) => g.id) } },
       orderBy: { rank: "asc" },
       select: { id: true, goalId: true, title: true, status: true },
     });
-    return goals.map((goal) => {
-      const own = milestones.filter((m) => m.goalId === goal.id);
-      const next = own.find((m) => m.status === "OPEN");
-      return {
-        ...toGoalDTO(goal),
-        nextMilestone: next === undefined ? null : { id: next.id, title: next.title },
-        milestoneCount: own.length,
-      };
-    });
+    const health = await healthInTx(tx, userId, goals, now);
+    return sortByHealth(
+      goals.map((goal) => {
+        const own = milestones.filter((m) => m.goalId === goal.id);
+        const next = own.find((m) => m.status === "OPEN");
+        return {
+          ...goal,
+          ...(health.get(goal.id) ?? NO_HEALTH),
+          nextMilestone: next === undefined ? null : { id: next.id, title: next.title },
+          milestoneCount: own.length,
+        };
+      }),
+    );
   });
 }
 
@@ -167,7 +252,11 @@ export async function listGoals(userId: string): Promise<GoalSummary[]> {
  * linked straight to the goal, newest first: everything the detail page
  * shows and what its optimistic updates need.
  */
-export async function getGoalDetail(userId: string, goalId: string): Promise<GoalDetailData> {
+export async function getGoalDetail(
+  userId: string,
+  goalId: string,
+  { now = new Date() }: ReadOptions = {},
+): Promise<GoalDetailData> {
   return forUser(userId).$transaction(async (tx) => {
     const goal = await tx.goal.findUnique({ where: { id: goalId } });
     if (goal === null) throw new NotFoundError("Goal", goalId);
@@ -183,8 +272,10 @@ export async function getGoalDetail(userId: string, goalId: string): Promise<Goa
         return b.completedAt.getTime() - a.completedAt.getTime();
       });
     const dto = toGoalDTO(goal);
+    const health = await healthInTx(tx, userId, [dto], now);
     return {
       ...dto,
+      ...(health.get(dto.id) ?? NO_HEALTH),
       milestones: milestones.map((m) => ({
         id: m.id,
         goalId: m.goalId,
@@ -200,5 +291,30 @@ export async function getGoalDetail(userId: string, goalId: string): Promise<Goa
       })),
       looseTasks: loose,
     };
+  });
+}
+
+export type NextStepResult =
+  | { kind: "task"; task: TaskDTO }
+  | { kind: "create"; goalId: string; milestone: { id: string; title: string } | null };
+
+/**
+ * "Schedule next step" on a stalled goal (pickNextStep): the first TODO task
+ * of the goal's first OPEN milestone, or what to create when there's none.
+ */
+export async function findNextStep(userId: string, goalId: string): Promise<NextStepResult> {
+  return forUser(userId).$transaction(async (tx) => {
+    const goal = await tx.goal.findUnique({ where: { id: goalId }, select: { id: true } });
+    if (goal === null) throw new NotFoundError("Goal", goalId);
+    const milestones = await tx.milestone.findMany({
+      where: { goalId },
+      orderBy: { rank: "asc" },
+      select: { id: true, title: true, status: true, tasks: { select: { id: true, status: true }, orderBy: { rank: "asc" } } },
+    });
+    const step: NextStep = pickNextStep(milestones);
+    if (step.kind === "create") return { kind: "create", goalId, milestone: step.milestone };
+    const task = await tx.task.findUnique({ where: { id: step.taskId } });
+    if (task === null) throw new NotFoundError("Task", step.taskId);
+    return { kind: "task", task: toTaskDTO(task) };
   });
 }

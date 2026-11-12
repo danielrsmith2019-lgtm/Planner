@@ -44,6 +44,9 @@ const day = (): DayData => ({
       metricTarget: null,
       metricCurrent: 0,
       progress: 0.5 / 3,
+      pace: null,
+      expectedProgress: null,
+      isStalled: false,
       milestones: [
         { id: "m1", title: "Design", status: "OPEN", weight: 1, progress: 0.5, counts: { todo: 1, done: 1, skipped: 0 } },
         { id: "m2", title: "Launch", status: "OPEN", weight: 2, progress: 0, counts: { todo: 1, done: 0, skipped: 0 } },
@@ -59,6 +62,9 @@ const day = (): DayData => ({
       metricTarget: 500,
       metricCurrent: 54,
       progress: 54 / 500,
+      pace: null,
+      expectedProgress: null,
+      isStalled: false,
       milestones: [],
     },
   ],
@@ -143,5 +149,36 @@ describe("applyServerCompletion", () => {
     expect(reconciled.tasks[0].completedAt).toEqual(serverTask.completedAt);
     expect(reconciled.goalTree[0].progress).toBe(0.31);
     expect(reconciled.goalTree[1]).toEqual(optimistic.goalTree[1]);
+  });
+});
+
+describe("pace after an optimistic completion", () => {
+  // g2 sits at 54/500 = 0.108 with 0.15 expected: on track (behind starts below 0.05).
+  const withExpected = (expectedProgress: number): DayData => {
+    const d = day();
+    return {
+      ...d,
+      goalTree: d.goalTree.map((g) => (g.id === "g2" ? { ...g, expectedProgress, pace: "on_track" as const } : g)),
+    };
+  };
+
+  it("recomputes the pace from the server's expected progress", () => {
+    // 62/500 = 0.124 against 0.074 expected: at least 0.05 over, so ahead.
+    const result = applyTaskCompletion(withExpected(0.074), "run", "complete", NOW);
+    expect(result.day.goalTree[1]?.pace).toBe("ahead");
+  });
+
+  it("leaves pace null for a goal without an expected progress", () => {
+    const result = applyTaskCompletion(day(), "run", "complete", NOW);
+    expect(result.day.goalTree[1]?.pace).toBeNull();
+  });
+
+  it("redoes the pace when the server's numbers land", () => {
+    const next = applyServerCompletion(withExpected(0.074), {
+      task: task({ id: "run", goalId: "g2", milestoneId: null, contribution: 8, status: "DONE", completedAt: NOW }),
+      milestone: null,
+      goal: { id: "g2", progress: 62 / 500, metricCurrent: 62 },
+    });
+    expect(next.goalTree[1]?.pace).toBe("ahead");
   });
 });

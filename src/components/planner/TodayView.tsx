@@ -21,7 +21,8 @@ import { Icon } from "@/utils/icons";
 import BacklogList from "./BacklogList";
 import CarryOverSheet from "./CarryOverSheet";
 import DailyTimeline, { type TimelineGeometry } from "./DailyTimeline";
-import GoalStrip, { type RingDelta } from "./GoalStrip";
+import { useScheduleNextStep } from "@/components/goals/useScheduleNextStep";
+import GoalStrip from "./GoalStrip";
 import TaskForm from "./TaskForm";
 import { taskFormFromTask } from "./task-form";
 import TaskRow from "./TaskRow";
@@ -31,7 +32,6 @@ import { AUTO_SCROLL, useTimelineDrag, type DropIntent } from "./useTimelineDrag
 
 const TASK_FORM_ID = "new-task-form";
 const EDIT_FORM_ID = "edit-task-form";
-const DELTA_VISIBLE_MS = 2200;
 /** Matches the shell: drag-and-drop is a desktop (768px up) feature. */
 const DESKTOP_QUERY = "(min-width: 768px)";
 
@@ -90,12 +90,12 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const place = useDayPlacement(date);
+  const nextStep = useScheduleNextStep(today, timezone);
   const resolveCarry = useResolveCarryOver();
   const desktop = useMediaQuery(DESKTOP_QUERY);
   // 1024px up: the journal sits in a right pane; below that, a link card.
   const withJournalPane = useMediaQuery("(min-width: 1024px)");
 
-  const [delta, setDelta] = useState<RingDelta | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formTopThree, setFormTopThree] = useState(false);
@@ -105,14 +105,7 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
   const [backlogOpen, setBacklogOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [undo, setUndo] = useState<UndoAction | null>(null);
-  const deltaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geometryRef = useRef<TimelineGeometry | null>(null);
-  useEffect(
-    () => () => {
-      if (deltaTimer.current !== null) clearTimeout(deltaTimer.current);
-    },
-    [],
-  );
 
   const goalById = new Map<string, GoalNode>(data.goalTree.map((g) => [g.id, g]));
   const { topThree, anytime, timed } = splitForTimeline(data.tasks);
@@ -131,19 +124,8 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
   const toggle = (task: DayTask, offer = true) => {
     setNotice(null);
     const direction = task.status === "DONE" ? "uncomplete" : "complete";
-    complete.mutate(
-      { taskId: task.id, direction },
-      {
-        // The ring itself moved optimistically; the badge shows the server's delta.
-        onSuccess: (result) => {
-          if (result.goal === null || !result.changed || result.delta === 0) return;
-          if (deltaTimer.current !== null) clearTimeout(deltaTimer.current);
-          setDelta({ goalId: result.goal.id, delta: result.delta, key: Date.now() });
-          deltaTimer.current = setTimeout(() => setDelta(null), DELTA_VISIBLE_MS);
-        },
-        onError: (error) => setNotice(error.message),
-      },
-    );
+    // The goal ring holds, then animates with "+N%" once the server settles (useCompleteTask).
+    complete.mutate({ taskId: task.id, direction }, { onError: (error) => setNotice(error.message) });
     if (offer) {
       const undone = { ...task, status: direction === "complete" ? ("DONE" as const) : ("TODO" as const) };
       offerUndo(direction === "complete" ? `Completed "${task.title}"` : `Marked "${task.title}" not done`, () => toggle(undone, false));
@@ -259,7 +241,11 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
         <aside className="flex flex-col gap-5 md:sticky md:top-[calc(56px+var(--safe-top)+24px)] md:max-h-[calc(100dvh-56px-var(--safe-top)-48px)] md:overflow-y-auto">
           <div>
             <h2 className="bc-section-label mb-1 hidden md:block">Goals</h2>
-            <GoalStrip goals={data.goalTree} delta={delta} />
+            <GoalStrip
+              goals={data.goalTree}
+              onScheduleNextStep={nextStep.start}
+              schedulingGoalId={nextStep.loadingGoalId}
+            />
           </div>
           {desktop && (
             <section aria-labelledby="backlog-rail-heading" className="flex flex-col gap-2">
@@ -293,10 +279,18 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
             </button>
           )}
 
-          {notice !== null && (
+          {(notice ?? nextStep.error) !== null && (
             <div role="alert" className="flex items-start gap-2 rounded-[14px] bg-bc-red-light py-1 pr-1 pl-4 text-bc-red-dark">
-              <p className="flex-1 py-2.5 text-[14px] font-medium">{notice}</p>
-              <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)} className="flex size-11 shrink-0 items-center justify-center">
+              <p className="flex-1 py-2.5 text-[14px] font-medium">{notice ?? nextStep.error}</p>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => {
+                  setNotice(null);
+                  nextStep.clearError();
+                }}
+                className="flex size-11 shrink-0 items-center justify-center"
+              >
                 <Icon icon="close" size={18} />
               </button>
             </div>
@@ -514,6 +508,7 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
           onApply={(decisions) => resolveCarry.mutate(decisions, { onSuccess: () => setCarryOpen(false) })}
         />
       )}
+      {nextStep.sheets}
     </DndContext>
   );
 }

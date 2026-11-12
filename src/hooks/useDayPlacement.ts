@@ -55,9 +55,12 @@ export function useDayPlacement(date: LocalDate) {
     },
     onSettled: () => {
       if (queryClient.isMutating({ mutationKey: ["placeTask"] }) > 1) return;
+      // Goals too: scheduling a step can end (or start) a goal's stalled state.
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: ["day"] }),
         queryClient.invalidateQueries({ queryKey: ["week"] }),
+        queryClient.invalidateQueries({ queryKey: ["goal"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.goals() }),
       ]);
     },
   });

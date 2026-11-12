@@ -51,6 +51,9 @@ const day = (): DayData => ({
       metricTarget: null,
       metricCurrent: 0,
       progress: 0,
+      pace: null,
+      expectedProgress: null,
+      isStalled: false,
       milestones: [
         { id: "m1", title: "M1", status: "OPEN", weight: 1, progress: 0, counts: { todo: 2, done: 0, skipped: 0 } },
         { id: "m2", title: "M2", status: "OPEN", weight: 1, progress: 0, counts: { todo: 2, done: 0, skipped: 0 } },
@@ -191,5 +194,27 @@ describe("optimistic completion", () => {
     await pending;
     expect(s.client.getQueryData(queryKeys.goal("g1"))).toEqual(detail);
     expect(s.cached()).toEqual(day());
+  });
+});
+
+describe("ring rise in the mutation context", () => {
+  it("records the goal and its progress before a completion that moves it up", async () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.day(DATE), day());
+    const handlers = createCompletionHandlers(client, () => new Promise(() => {}), () => NOW);
+    const context = await handlers.onMutate({ taskId: "a1", direction: "complete" });
+    expect(context.rise).toEqual({ goalId: "g1", before: 0 });
+  });
+
+  it("records nothing for an uncomplete", async () => {
+    const client = new QueryClient();
+    const done = day();
+    client.setQueryData(queryKeys.day(DATE), {
+      ...done,
+      tasks: done.tasks.map((t) => (t.id === "a1" ? { ...t, status: "DONE" as const, completedAt: NOW } : t)),
+    });
+    const handlers = createCompletionHandlers(client, () => new Promise(() => {}), () => NOW);
+    const context = await handlers.onMutate({ taskId: "a1", direction: "uncomplete" });
+    expect(context.rise).toBeNull();
   });
 });

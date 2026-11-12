@@ -12,6 +12,9 @@ const goal = (id: string, title: string, milestones: [string, string, "OPEN" | "
   metricTarget: null,
   metricCurrent: 0,
   progress: 0,
+  pace: null,
+  expectedProgress: null,
+  isStalled: false,
   milestones: milestones.map(([mid, mtitle, mstatus]) => ({
     id: mid,
     title: mtitle,

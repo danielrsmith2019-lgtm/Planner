@@ -742,3 +742,47 @@
     100% { background: transparent; box-shadow: 0 0 0 4px transparent; }
   }
 }
+
+@layer components {
+  /* Goal ring after a completion (GoalRing sweepFrom, AnimatedGoalRing). 1.2s = RING_ANIMATION_MS. */
+  @keyframes goal-ring-sweep {
+    from { stroke-dashoffset: var(--ring-from); }
+    to { stroke-dashoffset: var(--ring-to); }
+  }
+  @keyframes goal-ring-delta-float {
+    0% { opacity: 0; transform: translate(-50%, 6px); }
+    15% { opacity: 1; transform: translate(-50%, 0); }
+    70% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -16px); }
+  }
+  @keyframes goal-ring-delta-fade {
+    0%, 75% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .goal-ring-sweep {
+    animation: goal-ring-sweep 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .goal-ring-delta {
+    position: absolute;
+    left: 50%;
+    top: -14px;
+    z-index: 10;
+    pointer-events: none;
+    white-space: nowrap;
+    border-radius: 999px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 16px;
+    font-variant-numeric: tabular-nums;
+    background: var(--color-bc-green-light);
+    color: var(--color-bc-green-dark);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+    animation: goal-ring-delta-float 1.2s ease-out both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* No sweep: the ring shows the new value at once. The label stays put and fades. */
+    .goal-ring-sweep { animation: none; }
+    .goal-ring-delta { transform: translateX(-50%); animation-name: goal-ring-delta-fade; }
+  }
+}

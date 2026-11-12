@@ -56,6 +56,7 @@ export function useScheduleTask(weekStart: LocalDate) {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: ["week"] }),
         queryClient.invalidateQueries({ queryKey: ["day"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.goals() }),
       ]);
     },
   });

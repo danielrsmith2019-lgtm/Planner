@@ -15,6 +15,7 @@ import {
 import { isLastOpenTask, isReadyToClose, type MilestoneDetail } from "@/lib/domain/goal-detail";
 import type { DayTask } from "@/lib/domain/goal-tree";
 import { goalQuery } from "@/queries/goals";
+import { useUiStore } from "@/stores/ui";
 import { Icon } from "@/utils/icons";
 import AddMilestoneSheet from "./AddMilestoneSheet";
 import GoalHeader from "./GoalHeader";
@@ -22,6 +23,7 @@ import LogProgressSheet from "./LogProgressSheet";
 import MilestoneActionsSheet from "./MilestoneActionsSheet";
 import MilestoneList from "./MilestoneList";
 import ReflectionsList from "./ReflectionsList";
+import { useScheduleNextStep } from "../useScheduleNextStep";
 import TaskCheckRow from "./TaskCheckRow";
 
 /**
@@ -38,6 +40,9 @@ export default function GoalDetailView({ goalId }: { goalId: string }) {
   const createMilestone = useCreateMilestone(goalId);
   const addTask = useAddMilestoneTask(goalId);
   const logProgress = useLogProgress(goalId);
+  const today = useUiStore((s) => s.today);
+  const timezone = useUiStore((s) => s.timezone);
+  const nextStep = useScheduleNextStep(today, timezone);
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [addMilestoneOpen, setAddMilestoneOpen] = useState(false);
@@ -101,15 +106,23 @@ export default function GoalDetailView({ goalId }: { goalId: string }) {
     <div className="flex flex-col gap-5 pb-4">
       <BackLink />
 
-      <GoalHeader goal={data} onLogProgress={metric ? () => setLogOpen(true) : undefined} />
+      <GoalHeader
+        goal={data}
+        onLogProgress={metric ? () => setLogOpen(true) : undefined}
+        onScheduleNextStep={today === null ? undefined : () => nextStep.start(data.id)}
+        scheduling={nextStep.loadingGoalId === data.id}
+      />
 
-      {notice !== null && (
+      {(notice ?? nextStep.error) !== null && (
         <div role="alert" className="flex items-start gap-2 rounded-[14px] bg-bc-orange-light py-1 pr-1 pl-4 text-bc-orange-dark">
-          <p className="flex-1 py-2.5 text-[14px] font-medium">{notice}</p>
+          <p className="flex-1 py-2.5 text-[14px] font-medium">{notice ?? nextStep.error}</p>
           <button
             type="button"
             aria-label="Dismiss"
-            onClick={() => setNotice(null)}
+            onClick={() => {
+              setNotice(null);
+              nextStep.clearError();
+            }}
             className="flex size-11 shrink-0 items-center justify-center rounded-full"
           >
             <Icon icon="close" size={18} />
@@ -259,6 +272,8 @@ export default function GoalDetailView({ goalId }: { goalId: string }) {
           onSubmit={(values) => logProgress.mutate(values, { onSuccess: () => setLogOpen(false) })}
         />
       )}
+
+      {nextStep.sheets}
     </div>
   );
 }
