@@ -37,7 +37,8 @@ export type HeaderConfig = {
 const HEADERS: Record<string, HeaderConfig> = {
   "/today": { title: "Today", dateNav: true, dateStep: 1, modeChip: true },
   "/week": { title: "Week", dateNav: true, dateStep: 7, modeChip: false },
-  "/journal": { title: "Journal", dateNav: true, dateStep: 1, modeChip: false },
+  // The calendar and entry pages have their own month / day navigation.
+  "/journal": { title: "Journal", dateNav: false, dateStep: 1, modeChip: false },
   "/goals": { title: "Goals", dateNav: false, dateStep: 1, modeChip: false },
   "/settings": { title: "Settings", dateNav: false, dateStep: 1, modeChip: false },
   // Temporary (Day 10): data-layer test page, not in the nav.

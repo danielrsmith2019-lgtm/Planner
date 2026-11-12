@@ -3,6 +3,8 @@ import "server-only";
 import { forUser } from "@/lib/db";
 import type { GoalDetailData } from "@/lib/domain/goal-detail";
 import type { DayData, GoalNode, MilestoneNode, TaskCounts } from "@/lib/domain/goal-tree";
+import { weekDates } from "@/lib/domain/week";
+import type { WeekData } from "@/lib/domain/week-board";
 import type { LocalDate } from "@/lib/domain/dates";
 import type { Tx } from "./goals";
 import { fromLocalDate, toGoalDTO, toMilestoneDTO, toTaskDTO, type GoalDTO, type MilestoneDTO } from "./mappers";
@@ -76,6 +78,25 @@ async function milestonesWithCounts(tx: Tx, goalIds: string[]): Promise<Mileston
  * the goal tree: every ACTIVE goal, plus any other goal one of those tasks
  * points at (e.g. a paused goal).
  */
+/** Every ACTIVE goal plus any goal the given tasks point at, with milestone counts. */
+async function buildGoalTree(tx: Tx, tasks: readonly { goalId: string | null }[]): Promise<GoalNode[]> {
+  const linkedGoalIds = [...new Set(tasks.flatMap((t) => (t.goalId === null ? [] : [t.goalId])))];
+  const goals = await tx.goal.findMany({
+    where: { OR: [{ status: "ACTIVE" }, { id: { in: linkedGoalIds } }] },
+    orderBy: { rank: "asc" },
+  });
+  const milestones = await milestonesWithCounts(
+    tx,
+    goals.map((g) => g.id),
+  );
+  return goals.map((g) =>
+    toGoalNode(
+      toGoalDTO(g),
+      milestones.filter((m) => m.goalId === g.id),
+    ),
+  );
+}
+
 export async function getDay(userId: string, date: LocalDate): Promise<DayData> {
   const day = fromLocalDate(date);
   return forUser(userId).$transaction(async (tx) => {
@@ -85,25 +106,31 @@ export async function getDay(userId: string, date: LocalDate): Promise<DayData> 
       orderBy: { rank: "asc" },
       take: 200,
     });
-    const linkedGoalIds = [...new Set([...tasks, ...backlog].flatMap((t) => (t.goalId === null ? [] : [t.goalId])))];
-    const goals = await tx.goal.findMany({
-      where: { OR: [{ status: "ACTIVE" }, { id: { in: linkedGoalIds } }] },
-      orderBy: { rank: "asc" },
-    });
-    const milestones = await milestonesWithCounts(
-      tx,
-      goals.map((g) => g.id),
-    );
     return {
       date,
       tasks: tasks.map(toTaskDTO),
       backlog: backlog.map(toTaskDTO),
-      goalTree: goals.map((g) =>
-        toGoalNode(
-          toGoalDTO(g),
-          milestones.filter((m) => m.goalId === g.id),
-        ),
-      ),
+      goalTree: await buildGoalTree(tx, [...tasks, ...backlog]),
+    };
+  });
+}
+
+/**
+ * Seven days of tasks from startDate (a Monday on the client) in one request,
+ * each day in rank order, plus the goal tree for colors and the task form.
+ */
+export async function getWeek(userId: string, startDate: LocalDate): Promise<WeekData> {
+  const start = fromLocalDate(startDate);
+  const dates = weekDates(startDate);
+  const end = fromLocalDate(dates[6] ?? startDate);
+  return forUser(userId).$transaction(async (tx) => {
+    const tasks = (
+      await tx.task.findMany({ where: { scheduledDate: { gte: start, lte: end } }, orderBy: { rank: "asc" } })
+    ).map(toTaskDTO);
+    return {
+      startDate,
+      days: dates.map((date) => ({ date, tasks: tasks.filter((t) => t.scheduledDate === date) })),
+      goalTree: await buildGoalTree(tx, tasks),
     };
   });
 }

@@ -280,10 +280,17 @@ export type ScheduleInput = {
   /** Minutes from local midnight; null = on the day but not time-blocked. */
   startMin: number | null;
   durationMin: number | null;
-  /** From rankBetween() on the client, for the task's new position. */
-  rank: string;
+  /**
+   * From rankBetween() on the client, for the task's new position. Omit to
+   * append to the end of the target day (e.g. "Move to..." a day not on screen).
+   */
+  rank?: string;
 };
 
+/**
+ * Move a task to a day (or the backlog), a time and a position. A Top 3 task
+ * moved to a day that already has 3 arrives as a regular task.
+ */
 export async function scheduleTask(userId: string, taskId: string, input: ScheduleInput): Promise<TaskDTO> {
   if (input.scheduledDate !== null) assertLocalDate(input.scheduledDate, "scheduledDate");
   if (input.scheduledDate === null && input.startMin !== null) {
@@ -291,19 +298,39 @@ export async function scheduleTask(userId: string, taskId: string, input: Schedu
   }
   assertMinuteOfDay(input.startMin, "startMin");
   assertDuration(input.durationMin);
-  if (input.rank.trim() === "") throw new ValidationError("rank is required.");
+  if (input.rank !== undefined && input.rank.trim() === "") throw new ValidationError("rank can't be empty.");
 
   return forUser(userId).$transaction(async (tx) => {
-    const existing = await tx.task.findUnique({ where: { id: taskId }, select: { id: true } });
+    const existing = await tx.task.findUnique({
+      where: { id: taskId },
+      select: { id: true, isTopThree: true, scheduledDate: true },
+    });
     if (existing === null) throw new NotFoundError("Task", taskId);
+    const target = input.scheduledDate === null ? null : fromLocalDate(input.scheduledDate);
+    const sameDay = (existing.scheduledDate?.getTime() ?? null) === (target?.getTime() ?? null);
+
+    let rank = input.rank;
+    if (rank === undefined) {
+      const last = await tx.task.findFirst({
+        where: { scheduledDate: target, id: { not: taskId } },
+        orderBy: { rank: "desc" },
+        select: { rank: true },
+      });
+      rank = rankAfter(last?.rank ?? null);
+    }
+    const keepTopThree =
+      existing.isTopThree &&
+      input.scheduledDate !== null &&
+      (sameDay || (await countTopThree(tx, input.scheduledDate, taskId)) < MAX_TOP_THREE);
 
     const task = await tx.task.update({
       where: { id: taskId },
       data: {
-        scheduledDate: input.scheduledDate === null ? null : fromLocalDate(input.scheduledDate),
+        scheduledDate: target,
         startMin: input.startMin,
         durationMin: input.durationMin,
-        rank: input.rank,
+        rank,
+        isTopThree: keepTopThree,
       },
     });
     return toTaskDTO(task);

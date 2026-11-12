@@ -43,6 +43,7 @@ export function useCreateTask() {
         queryClient.invalidateQueries({ queryKey: ["day"] }),
         queryClient.invalidateQueries({ queryKey: ["goal"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.goals() }),
+        queryClient.invalidateQueries({ queryKey: ["week"] }),
       ]),
   });
 }
@@ -58,6 +59,7 @@ export function useResolveCarryOver() {
         queryClient.invalidateQueries({ queryKey: ["day"] }),
         queryClient.invalidateQueries({ queryKey: ["goal"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.goals() }),
+        queryClient.invalidateQueries({ queryKey: ["week"] }),
       ]),
   });
 }

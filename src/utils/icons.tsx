@@ -1,6 +1,15 @@
 import { createElement } from "react";
 import {
   AlertTriangle,
+  Bold,
+  Frown,
+  Heading2,
+  Laugh,
+  List,
+  ListChecks,
+  Meh,
+  Smile,
+  Sparkles,
   Archive,
   CalendarClock,
   CalendarDays,
@@ -56,6 +65,17 @@ export const ICONS = {
   reopen: RotateCcw,
   drag: GripVertical,
   expand: ChevronDown,
+  // Journal moods 1-5 (never emoji)
+  moodRough: Frown,
+  moodMeh: Meh,
+  moodOkay: Smile,
+  moodGood: Laugh,
+  moodGreat: Sparkles,
+  // Journal toolbar
+  bold: Bold,
+  heading: Heading2,
+  bulletList: List,
+  checklist: ListChecks,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
@@ -94,6 +114,15 @@ export function Icon({
 
 export {
   AlertTriangle,
+  Bold,
+  Frown,
+  Heading2,
+  Laugh,
+  List,
+  ListChecks,
+  Meh,
+  Smile,
+  Sparkles,
   Archive,
   CalendarClock,
   CalendarDays,

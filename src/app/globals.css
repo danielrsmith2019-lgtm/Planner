@@ -670,3 +670,62 @@
     .hide-desktop { display: none !important; }
   }
 }
+
+/* ---------- Journal editor (Tiptap) ---------- */
+
+@layer components {
+  .journal-prose {
+    min-height: 200px;
+    outline: none;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-fg);
+    caret-color: var(--color-bc-blue);
+  }
+  .journal-prose > * + * { margin-top: 0.6em; }
+  .journal-prose h2 { font-size: 20px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; margin-top: 1em; }
+  .journal-prose h3 { font-size: 17px; font-weight: 600; line-height: 1.35; margin-top: 0.9em; }
+  .journal-prose strong { font-weight: 650; }
+  .journal-prose ul:not([data-type="taskList"]) { list-style: disc; padding-left: 1.4em; }
+  .journal-prose ol { list-style: decimal; padding-left: 1.4em; }
+  .journal-prose li > p { margin: 0; }
+  .journal-prose blockquote { border-left: 3px solid var(--color-border-strong); padding-left: 12px; color: var(--color-fg-secondary); }
+  .journal-prose code { font-family: var(--font-mono); font-size: 0.9em; background: var(--color-surface-alt); padding: 1px 4px; border-radius: 4px; }
+
+  /* Checklists: a 22px round checkbox, 44px tall rows to tap. */
+  .journal-prose ul[data-type="taskList"] { padding-left: 0; list-style: none; }
+  .journal-prose ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 10px; }
+  .journal-prose ul[data-type="taskList"] li > label { flex-shrink: 0; display: flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; cursor: pointer; user-select: none; }
+  .journal-prose ul[data-type="taskList"] li > label input {
+    appearance: none; width: 20px; height: 20px; min-height: 0; border-radius: 6px; margin: 0;
+    border: 2px solid var(--color-border-strong); background: var(--color-surface); cursor: pointer;
+    display: grid; place-content: center; transition: background 0.15s, border-color 0.15s;
+  }
+  .journal-prose ul[data-type="taskList"] li > label input:checked { background: var(--color-bc-blue); border-color: var(--color-bc-blue); }
+  .journal-prose ul[data-type="taskList"] li > label input:checked::after {
+    content: ""; width: 10px; height: 6px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg);
+  }
+  .journal-prose ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+  .journal-prose ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--color-fg-tertiary); text-decoration: line-through; }
+
+  /* Placeholder on the empty first line. */
+  .journal-prose p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--color-fg-tertiary);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+}
+
+@layer components {
+  .journal-prose .journal-mention {
+    color: var(--color-bc-blue);
+    background: var(--color-bc-blue-light);
+    border-radius: 6px;
+    padding: 0 4px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+}

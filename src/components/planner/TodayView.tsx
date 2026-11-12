@@ -2,8 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import JournalPane, { JournalLinkCard } from "@/components/journal/JournalPane";
 import BottomSheet from "@/components/shared/BottomSheet";
 import { useCompleteTask } from "@/hooks/useCompleteTask";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCreateTask, useResolveCarryOver } from "@/hooks/useTaskMutations";
 import { hasTopThreeRoom, MAX_TOP_THREE, splitDayTasks } from "@/lib/domain/day-lists";
 import { formatDayLabel, type LocalDate } from "@/lib/domain/dates";
@@ -43,6 +45,8 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
   const complete = useCompleteTask();
   const createTask = useCreateTask();
   const resolveCarry = useResolveCarryOver();
+  // 1024px up: the journal sits in a right pane; below that, a link card.
+  const withJournalPane = useMediaQuery("(min-width: 1024px)");
 
   const [delta, setDelta] = useState<RingDelta | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -106,7 +110,7 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
   };
 
   return (
-    <div className="flex flex-col gap-5 md:grid md:grid-cols-[208px_minmax(0,1fr)] md:items-start md:gap-6">
+    <div className="flex flex-col gap-5 md:grid md:grid-cols-[208px_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[176px_minmax(0,1fr)_minmax(300px,360px)] lg:gap-5">
       <aside className="md:sticky md:top-[calc(56px+var(--safe-top)+24px)]">
         <h2 className="bc-section-label mb-1 hidden md:block">Goals</h2>
         <GoalStrip goals={data.goalTree} delta={delta} />
@@ -200,7 +204,15 @@ function TodayFor({ date, today }: { date: LocalDate; today: LocalDate }) {
             </div>
           )}
         </section>
+
+        {!withJournalPane && <JournalLinkCard date={date} isToday={isToday} />}
       </div>
+
+      {withJournalPane && (
+        <div className="lg:sticky lg:top-[calc(56px+var(--safe-top)+24px)]">
+          <JournalPane date={date} />
+        </div>
+      )}
 
       <BottomSheet
         open={formOpen}

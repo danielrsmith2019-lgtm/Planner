@@ -200,3 +200,26 @@ export async function getJournalEntry(userId: string, date: LocalDate): Promise<
   const { _count, ...row } = entry;
   return toDTO(row, _count.links);
 }
+
+export type JournalDaySummary = {
+  date: LocalDate;
+  mood: number | null;
+  /** True when the entry has any text (an entry can exist with only a mood). */
+  hasText: boolean;
+};
+
+/** Entries between two dates (inclusive), for the month calendar's dots. */
+export async function listJournalDays(userId: string, from: LocalDate, to: LocalDate): Promise<JournalDaySummary[]> {
+  try {
+    if (toDayNumber(to) < toDayNumber(from)) throw new ValidationError("to must be on or after from.");
+  } catch (error) {
+    if (error instanceof ValidationError) throw error;
+    throw new ValidationError("from and to must be YYYY-MM-DD dates.");
+  }
+  const entries = await forUser(userId).journalEntry.findMany({
+    where: { date: { gte: fromLocalDate(from), lte: fromLocalDate(to) } },
+    orderBy: { date: "asc" },
+    select: { date: true, mood: true, plainText: true },
+  });
+  return entries.map((e) => ({ date: toLocalDate(e.date), mood: e.mood, hasText: e.plainText.trim() !== "" }));
+}

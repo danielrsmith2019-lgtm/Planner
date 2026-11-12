@@ -1,11 +1,9 @@
-import ComingSoon from "@/components/shell/ComingSoon";
+import WeekView from "@/components/week/WeekView";
 
 export const metadata = { title: "Week | Planner" };
 
+// Seven columns on desktop, day sections on phones. Loads ['week', monday]
+// on the client; the header arrows move a week at a time.
 export default function WeekPage() {
-  return (
-    <ComingSoon icon="week" title="Week">
-      Seven days of tasks, drag between days. The arrows above already move a week at a time.
-    </ComingSoon>
-  );
+  return <WeekView />;
 }

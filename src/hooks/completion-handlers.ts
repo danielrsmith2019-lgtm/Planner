@@ -160,6 +160,8 @@ export function createCompletionHandlers(
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: DAY_PREFIX }),
           queryClient.invalidateQueries({ queryKey: GOAL_PREFIX }),
+          // The week view shows done counts; it refetches rather than updating optimistically.
+          queryClient.invalidateQueries({ queryKey: ["week"] }),
         ]);
       }
     },

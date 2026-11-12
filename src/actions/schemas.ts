@@ -37,8 +37,10 @@ export const scheduleTaskInput = z.object({
   scheduledDate: localDateSchema.nullable(),
   startMin: minuteOfDay.nullable(),
   durationMin: duration.nullable(),
-  rank: z.string().min(1).max(64),
+  rank: z.string().regex(/^[0-9a-z]{1,64}$/).optional(),
 });
+
+export const weekInput = z.object({ startDate: localDateSchema });
 
 export const setTaskLinkInput = z.object({ taskId: idSchema, link: taskLinkSchema.nullable() });
 
@@ -105,3 +107,5 @@ export const resolveCarryOverInput = z.object({
   reschedule: z.array(z.object({ taskId: idSchema, date: localDateSchema })).max(200),
   drop: z.array(idSchema).max(200),
 });
+
+export const monthInput = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM.") });
