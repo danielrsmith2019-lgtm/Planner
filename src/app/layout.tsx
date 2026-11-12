@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import TimezoneSync from "@/components/shared/TimezoneSync";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${dmSans.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-dvh bg-canvas font-sans text-fg antialiased">
+        <TimezoneSync />
         {children}
       </body>
     </html>

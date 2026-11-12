@@ -4,6 +4,8 @@ import {
   CalendarClock,
   CalendarDays,
   Check,
+  LogOut,
+  Mail,
   Minus,
   NotebookPen,
   Plus,
@@ -32,6 +34,8 @@ export const ICONS = {
   ahead: TrendingUp,
   behind: TrendingDown,
   flat: Minus,
+  mail: Mail,
+  signOut: LogOut,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
@@ -73,6 +77,8 @@ export {
   CalendarClock,
   CalendarDays,
   Check,
+  LogOut,
+  Mail,
   Minus,
   NotebookPen,
   Plus,

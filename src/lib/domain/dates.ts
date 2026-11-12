@@ -76,6 +76,17 @@ export function getLocalToday(user: DayBoundaryUser, now: Date): LocalDate {
   return minuteOfDay < dayStartsAt ? addDays(date, -1) : date;
 }
 
+/** True for IANA zones this runtime knows, e.g. "America/New_York". */
+export function isValidTimeZone(timezone: string): boolean {
+  if (typeof timezone !== "string" || timezone.trim() === "") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** 450 -> "7:30 AM" (default) or "07:30" with "24h". */
 export function minutesToLabel(startMin: number, clock: ClockFormat = "12h"): string {
   if (!Number.isInteger(startMin) || startMin < 0 || startMin >= MINUTES_PER_DAY) {

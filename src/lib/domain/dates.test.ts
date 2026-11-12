@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, getLocalToday, labelToMinutes, minutesToLabel, toDayNumber } from "./dates";
+import { addDays, getLocalToday, isValidTimeZone, labelToMinutes, minutesToLabel, toDayNumber } from "./dates";
 
 const NY = { timezone: "America/New_York", dayStartsAt: 240 };
 const at = (iso: string) => new Date(iso);
@@ -167,5 +167,15 @@ describe("labelToMinutes", () => {
       expect(labelToMinutes(minutesToLabel(m))).toBe(m);
       expect(labelToMinutes(minutesToLabel(m, "24h"))).toBe(m);
     }
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it.each(["America/New_York", "Europe/Lisbon", "Asia/Tokyo", "UTC"])("accepts %s", (tz) => {
+    expect(isValidTimeZone(tz)).toBe(true);
+  });
+
+  it.each(["", "Mars/Olympus", "EST5EDT/garbage", "not a zone"])("rejects %j", (tz) => {
+    expect(isValidTimeZone(tz)).toBe(false);
   });
 });
