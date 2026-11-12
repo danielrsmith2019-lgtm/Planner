@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 import { useUiStore } from "@/stores/ui";
 import { Icon } from "@/utils/icons";
 import { NAV_ITEMS, isActivePath } from "./nav";
@@ -12,7 +13,21 @@ import { NAV_ITEMS, isActivePath } from "./nav";
  *   >=1024px:   240px frosted sidebar with icons and labels
  */
 export default function Sidebar() {
-  const pathname = usePathname();
+  // usePathname is request data on dynamic routes (/goals/[id]), so with
+  // cacheComponents it must sit inside Suspense. The fallback is the same nav
+  // with nothing highlighted; static routes resolve it at build time.
+  return (
+    <Suspense fallback={<SidebarFrame pathname={null} />}>
+      <SidebarWithPathname />
+    </Suspense>
+  );
+}
+
+function SidebarWithPathname() {
+  return <SidebarFrame pathname={usePathname()} />;
+}
+
+function SidebarFrame({ pathname }: { pathname: string | null }) {
   const openQuickAdd = useUiStore((s) => s.openQuickAdd);
 
   return (
@@ -42,7 +57,7 @@ export default function Sidebar() {
 
       <nav aria-label="Main" className="flex flex-col gap-1 px-3 py-2 lg:px-4">
         {NAV_ITEMS.map((item) => {
-          const active = isActivePath(pathname, item.href);
+          const active = pathname !== null && isActivePath(pathname, item.href);
           return (
             <Link
               key={item.href}

@@ -205,3 +205,11 @@ describe("formatDayLabel", () => {
     expect(formatDayLabel("2026-11-04", { short: true })).toBe("Nov 4");
   });
 });
+
+describe("formatDate", () => {
+  it("formats a local date without shifting it by timezone", async () => {
+    const { formatDate } = await import("./dates");
+    expect(formatDate("2026-11-01")).toBe("Nov 1, 2026");
+    expect(formatDate("2027-04-30")).toBe("Apr 30, 2027");
+  });
+});

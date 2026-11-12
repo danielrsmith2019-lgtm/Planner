@@ -1,6 +1,7 @@
 import "server-only";
 
 import { forUser } from "@/lib/db";
+import type { GoalDetailData } from "@/lib/domain/goal-detail";
 import type { DayData, GoalNode, MilestoneNode, TaskCounts } from "@/lib/domain/goal-tree";
 import type { LocalDate } from "@/lib/domain/dates";
 import type { Tx } from "./goals";
@@ -127,13 +128,43 @@ export async function listGoals(userId: string): Promise<GoalSummary[]> {
   });
 }
 
-export type GoalDetail = GoalDTO & { milestones: MilestoneWithCounts[] };
-
-/** One goal with its milestones and their task counts. */
-export async function getGoalDetail(userId: string, goalId: string): Promise<GoalDetail> {
+/**
+ * One goal with its milestones (task counts and every task) and the tasks
+ * linked straight to the goal, newest first: everything the detail page
+ * shows and what its optimistic updates need.
+ */
+export async function getGoalDetail(userId: string, goalId: string): Promise<GoalDetailData> {
   return forUser(userId).$transaction(async (tx) => {
     const goal = await tx.goal.findUnique({ where: { id: goalId } });
     if (goal === null) throw new NotFoundError("Goal", goalId);
-    return { ...toGoalDTO(goal), milestones: await milestonesWithCounts(tx, [goal.id]) };
+    const milestones = await milestonesWithCounts(tx, [goal.id]);
+    const tasks = (await tx.task.findMany({ where: { goalId }, orderBy: { rank: "asc" } })).map(toTaskDTO);
+    const loose = tasks
+      .filter((t) => t.milestoneId === null)
+      // Open tasks first (rank order), then done ones, newest first.
+      .sort((a, b) => {
+        if (a.completedAt === null || b.completedAt === null) {
+          return a.completedAt === b.completedAt ? 0 : a.completedAt === null ? -1 : 1;
+        }
+        return b.completedAt.getTime() - a.completedAt.getTime();
+      });
+    const dto = toGoalDTO(goal);
+    return {
+      ...dto,
+      milestones: milestones.map((m) => ({
+        id: m.id,
+        goalId: m.goalId,
+        title: m.title,
+        status: m.status,
+        weight: m.weight,
+        progress: m.progress,
+        counts: m.counts,
+        targetDate: m.targetDate,
+        rank: m.rank,
+        completedAt: m.completedAt,
+        tasks: tasks.filter((t) => t.milestoneId === m.id),
+      })),
+      looseTasks: loose,
+    };
   });
 }

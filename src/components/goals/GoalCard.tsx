@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import GoalRing from "@/components/shared/GoalRing";
 import {
   DropdownMenu,
@@ -54,7 +55,6 @@ export default function GoalCard({ goal, onStatusChange }: GoalCardProps) {
     <article
       className="bc-card bento-half relative flex items-center gap-4 border-l-[3px] py-4 pr-2"
       style={{ borderLeftColor: goal.color }}
-      aria-label={`${goal.title}, ${Math.round(goal.progress * 100)}% complete, ${STATUS_LABEL[goal.status]}`}
     >
       <GoalRing
         progress={goal.progress}
@@ -64,8 +64,17 @@ export default function GoalCard({ goal, onStatusChange }: GoalCardProps) {
       />
       <div className="min-w-0 flex-1">
         <h3 className={cn("line-clamp-2 text-[16px] font-semibold leading-snug text-fg", inactive && "text-fg-secondary")}>
-          {goal.title}
+          {/* The link covers the whole card; the menu button sits above it. */}
+          <Link
+            href={`/goals/${goal.id}`}
+            className="outline-none after:absolute after:inset-0 after:rounded-[20px] focus-visible:after:outline-2 focus-visible:after:outline-bc-blue"
+          >
+            {goal.title}
+          </Link>
         </h3>
+        <p className="sr-only">
+          {Math.round(goal.progress * 100)}% complete, {STATUS_LABEL[goal.status]}.
+        </p>
         <p className="mt-0.5 truncate text-[13px] text-fg-secondary">{subtitle(goal)}</p>
         <div className="mt-2">
           <StatusPill status={goal.status} color={goal.color} />
@@ -74,7 +83,7 @@ export default function GoalCard({ goal, onStatusChange }: GoalCardProps) {
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Actions for ${goal.title}`}
-          className="flex size-11 shrink-0 items-center justify-center self-start rounded-full text-fg-secondary hover:bg-surface-alt focus-visible:outline-2 focus-visible:outline-bc-blue"
+          className="relative z-10 flex size-11 shrink-0 items-center justify-center self-start rounded-full text-fg-secondary hover:bg-surface-alt focus-visible:outline-2 focus-visible:outline-bc-blue"
         >
           <Icon icon="more" size={20} />
         </DropdownMenuTrigger>

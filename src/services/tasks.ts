@@ -396,3 +396,79 @@ export async function carryOverTasks(
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// Log progress (metric goals)
+// ---------------------------------------------------------------------------
+
+export type LogProgressInput = {
+  /** Positive amount in the goal's unit, e.g. 8 for 8 km. */
+  amount: number;
+  /** Optional label; defaults to "Logged 8 km". */
+  title?: string | null;
+};
+
+const formatAmount = (value: number) => (Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100));
+
+/**
+ * Blueprint Section 3: "log progress" creates an already-DONE task with the
+ * contribution, so the goal's metricCurrent stays the sum of DONE tasks (one
+ * source of truth). It lands on the user's today, linked to the goal, and
+ * logs TASK_COMPLETED with the progress delta like any completion.
+ * Unchecking it later is a normal uncompleteTask.
+ */
+export async function logProgress(
+  userId: string,
+  goalId: string,
+  input: LogProgressInput,
+  { now = new Date() }: ServiceOptions = {},
+): Promise<CompletionResult> {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new ValidationError("Enter an amount above 0.");
+  }
+  if (input.amount > 1_000_000) throw new ValidationError("That amount is too large.");
+  const amount = Math.round(input.amount * 100) / 100;
+
+  return forUser(userId).$transaction(async (tx) => {
+    const goal = await tx.goal.findUnique({ where: { id: goalId } });
+    if (goal === null) throw new NotFoundError("Goal", goalId);
+    if (goal.progressMode !== "METRIC") {
+      throw new ValidationError("Log progress is for metric goals. Complete a milestone task instead.");
+    }
+    const today = await userToday(tx, userId, now);
+    const last = await tx.task.findFirst({
+      where: { scheduledDate: fromLocalDate(today) },
+      orderBy: { rank: "desc" },
+      select: { rank: true },
+    });
+    const title = input.title?.trim() || `Logged ${formatAmount(amount)} ${goal.metricUnit ?? ""}`.trim();
+
+    const created = await tx.task.create({
+      data: {
+        userId,
+        goalId,
+        title: title.slice(0, 200),
+        status: "DONE",
+        completedAt: now,
+        scheduledDate: fromLocalDate(today),
+        durationMin: null,
+        contribution: amount,
+        rank: rankAfter(last?.rank ?? null),
+      },
+    });
+
+    const recomputed = await recomputeGoalInTx(tx, goalId);
+    const delta = recomputed.after - recomputed.before;
+    await tx.activityEvent.create({
+      data: {
+        userId,
+        type: "TASK_COMPLETED",
+        localDate: fromLocalDate(today),
+        taskId: created.id,
+        goalId,
+        payload: { before: recomputed.before, after: recomputed.after, delta } satisfies Prisma.InputJsonObject,
+      },
+    });
+    return { task: toTaskDTO(created), milestone: null, goal: toGoalDTO(recomputed.goal), delta, changed: true };
+  });
+}

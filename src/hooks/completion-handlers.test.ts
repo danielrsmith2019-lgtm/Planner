@@ -1,5 +1,6 @@
 import { MutationObserver, QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import type { GoalDetailData } from "@/lib/domain/goal-detail";
 import type { DayData, DayTask } from "@/lib/domain/goal-tree";
 import { queryKeys } from "@/queries/keys";
 import type { CompletionResult } from "@/services/tasks";
@@ -75,14 +76,14 @@ function setup(run: RunCompletion) {
   client.setQueryDefaults(queryKeys.day(DATE), { queryFn: refetch, staleTime: Infinity });
   // An active observer, like the /debug page, so invalidation refetches.
   new QueryObserver(client, { queryKey: queryKeys.day(DATE) }).subscribe(() => {});
-  const handlers = createCompletionHandlers(client, DATE, run, () => NOW);
+  const handlers = createCompletionHandlers(client, run, () => NOW);
   const mutate = (variables: CompletionVariables) => {
     const observer = new MutationObserver<CompletionResult, Error, CompletionVariables, CompletionContext>(client, {
-      mutationKey: completionMutationKey(DATE),
+      mutationKey: completionMutationKey,
       mutationFn: handlers.mutationFn,
       onMutate: (v) => handlers.onMutate(v),
       onError: (e, v, c) => handlers.onError(e, v, c),
-      onSettled: (d) => handlers.onSettled(d),
+      onSettled: (d, e, v) => handlers.onSettled(d, e, v),
     });
     return observer.mutate(variables).catch(() => undefined);
   };
@@ -151,6 +152,43 @@ describe("optimistic completion", () => {
 
     second.reject(new Error("boom"));
     await p2;
+    expect(s.cached()).toEqual(day());
+  });
+
+  it("updates a cached goal detail holding the same task, and rolls both back on failure", async () => {
+    const server = deferred<CompletionResult>();
+    const s = setup(() => server.promise);
+    const base = day();
+    const goal = base.goalTree[0];
+    const detail: GoalDetailData = {
+      ...goal,
+      why: null,
+      startDate: "2026-11-01",
+      targetDate: null,
+      rank: "i0",
+      completedAt: null,
+      milestones: goal.milestones.map((m) => ({
+        ...m,
+        goalId: "g1",
+        targetDate: null,
+        rank: m.id,
+        completedAt: null,
+        tasks: base.tasks.filter((t) => t.milestoneId === m.id),
+      })),
+      looseTasks: [],
+    };
+    s.client.setQueryData(queryKeys.goal("g1"), detail);
+
+    const pending = s.mutate({ taskId: "a1", direction: "complete" });
+    await vi.waitFor(() => expect(s.cached()?.tasks[0].status).toBe("DONE"));
+    const cachedDetail = s.client.getQueryData<GoalDetailData>(queryKeys.goal("g1"));
+    expect(cachedDetail?.milestones[0].tasks[0].status).toBe("DONE");
+    expect(cachedDetail?.progress).toBe(0.25);
+    expect(cachedDetail?.progress).toBe(goalProgress(s.cached()));
+
+    server.reject(new Error("boom"));
+    await pending;
+    expect(s.client.getQueryData(queryKeys.goal("g1"))).toEqual(detail);
     expect(s.cached()).toEqual(day());
   });
 });

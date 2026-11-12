@@ -5,6 +5,7 @@ import {
   carryOverTasks,
   completeTask,
   createTask,
+  logProgress,
   scheduleTask,
   setTaskLink,
   uncompleteTask,
@@ -14,6 +15,7 @@ import { runAction } from "./result";
 import {
   carryOverInput,
   createTaskInput,
+  logProgressInput,
   scheduleTaskInput,
   setTaskLinkInput,
   taskIdInput,
@@ -43,5 +45,12 @@ export async function setTaskLinkAction(input: unknown): Promise<ActionResult<Co
 export async function carryOverTasksAction(input: unknown): Promise<ActionResult<CarryOverResult>> {
   return runAction(carryOverInput, input, (user, { fromDate, toDate, taskIds }) =>
     carryOverTasks(user.id, fromDate, toDate, taskIds),
+  );
+}
+
+/** Metric goals: create an already-DONE task carrying the amount. */
+export async function logProgressAction(input: unknown): Promise<ActionResult<CompletionResult>> {
+  return runAction(logProgressInput, input, (user, { goalId, amount, title }) =>
+    logProgress(user.id, goalId, { amount, title }),
   );
 }

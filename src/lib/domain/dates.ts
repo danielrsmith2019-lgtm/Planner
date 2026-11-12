@@ -98,6 +98,13 @@ export function formatDayLabel(date: LocalDate, { short = false }: { short?: boo
   return (short ? SHORT_DAY_LABEL : DAY_LABEL).format(instant);
 }
 
+const MONTH_DAY_YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+/** "2026-11-01" -> "Nov 1, 2026", for start and target dates. */
+export function formatDate(date: LocalDate): string {
+  return MONTH_DAY_YEAR.format(new Date(toDayNumber(date) * MS_PER_DAY));
+}
+
 /** True for IANA zones this runtime knows, e.g. "America/New_York". */
 export function isValidTimeZone(timezone: string): boolean {
   if (typeof timezone !== "string" || timezone.trim() === "") return false;

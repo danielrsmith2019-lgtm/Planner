@@ -5,9 +5,11 @@ import {
   CalendarClock,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Ellipsis,
+  GripVertical,
   LogOut,
   Mail,
   Minus,
@@ -52,6 +54,8 @@ export const ICONS = {
   resume: Play,
   archive: Archive,
   reopen: RotateCcw,
+  drag: GripVertical,
+  expand: ChevronDown,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
@@ -94,9 +98,11 @@ export {
   CalendarClock,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Ellipsis,
+  GripVertical,
   LogOut,
   Mail,
   Minus,

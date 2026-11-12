@@ -28,7 +28,7 @@ type LastChange = { title: string; goal: string; optimistic: number; server: num
 
 function DebugDayFor({ date }: { date: LocalDate }) {
   const day = useQuery(dayQuery(date));
-  const complete = useCompleteTask(date);
+  const complete = useCompleteTask();
   const [last, setLast] = useState<LastChange | null>(null);
 
   if (day.isPending) return <div className="bc-card bc-skeleton h-40" aria-hidden="true" />;

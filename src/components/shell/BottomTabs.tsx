@@ -2,13 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 import { useUiStore } from "@/stores/ui";
 import { Icon } from "@/utils/icons";
 import { TAB_ITEMS_LEFT, TAB_ITEMS_RIGHT, isActivePath, type NavItem } from "./nav";
 
 /** Phone navigation (<768px): Today, Week, raised Quick add, Journal, Goals. */
 export default function BottomTabs() {
-  const pathname = usePathname();
+  // usePathname is request data on dynamic routes (/goals/[id]), so with
+  // cacheComponents it must sit inside Suspense. The fallback is the same nav
+  // with nothing highlighted; static routes resolve it at build time.
+  return (
+    <Suspense fallback={<BottomTabsFrame pathname={null} />}>
+      <BottomTabsWithPathname />
+    </Suspense>
+  );
+}
+
+function BottomTabsWithPathname() {
+  return <BottomTabsFrame pathname={usePathname()} />;
+}
+
+function BottomTabsFrame({ pathname }: { pathname: string | null }) {
   const openQuickAdd = useUiStore((s) => s.openQuickAdd);
 
   return (
@@ -19,7 +34,7 @@ export default function BottomTabs() {
     >
       <div className="grid h-16 grid-cols-5 items-stretch">
         {TAB_ITEMS_LEFT.map((item) => (
-          <Tab key={item.href} item={item} active={isActivePath(pathname, item.href)} />
+          <Tab key={item.href} item={item} active={pathname !== null && isActivePath(pathname, item.href)} />
         ))}
         <div className="flex items-start justify-center">
           <button
@@ -32,7 +47,7 @@ export default function BottomTabs() {
           </button>
         </div>
         {TAB_ITEMS_RIGHT.map((item) => (
-          <Tab key={item.href} item={item} active={isActivePath(pathname, item.href)} />
+          <Tab key={item.href} item={item} active={pathname !== null && isActivePath(pathname, item.href)} />
         ))}
       </div>
     </nav>

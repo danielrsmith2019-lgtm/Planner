@@ -83,3 +83,19 @@ export const saveJournalInput = z.object({
   intention: z.string().max(500).nullish(),
   mood: z.number().int().min(1).max(5).nullish(),
 });
+
+export const updateMilestoneInput = z
+  .object({
+    milestoneId: idSchema,
+    rank: z.string().regex(/^[0-9a-z]{1,64}$/).optional(),
+    weight: z.number().int().min(1).max(3).optional(),
+  })
+  .refine((v) => v.rank !== undefined || v.weight !== undefined, { error: "Nothing to change." });
+
+export const setMilestoneStatusInput = z.object({ milestoneId: idSchema, status: z.enum(["OPEN", "DONE"]) });
+
+export const logProgressInput = z.object({
+  goalId: idSchema,
+  amount: z.number({ error: "Enter an amount." }).finite().positive("Enter an amount above 0.").max(1_000_000),
+  title: z.string().trim().max(200).nullish(),
+});

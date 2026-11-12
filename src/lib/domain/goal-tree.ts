@@ -89,6 +89,54 @@ function moveCount(counts: TaskCounts, from: TaskStatus, to: TaskStatus): TaskCo
 
 const roundToCents = (value: number) => Math.round(value * 100) / 100;
 
+/** The milestone fields the goal math reads. Detail views add more fields. */
+type GoalLike<M extends MilestoneNode> = Omit<GoalNode, "milestones"> & { milestones: M[] };
+
+/**
+ * Apply one task's status change to its goal: move the milestone's count and
+ * recompute it with computeMilestoneProgress, then recompute the goal with
+ * computeMilestonesGoalProgress (MILESTONES) or computeMetricProgress (METRIC).
+ * Generic so the day's slim tree and the goal detail page share the math.
+ */
+export function applyStatusChangeToGoal<M extends MilestoneNode, G extends GoalLike<M>>(
+  goal: G,
+  task: { milestoneId: string | null; contribution: number | null },
+  from: TaskStatus,
+  to: TaskStatus,
+): { goal: G; delta: number } {
+  const milestones = goal.milestones.map((m) => {
+    if (m.id !== task.milestoneId) return m;
+    const counts = moveCount(m.counts, from, to);
+    return { ...m, counts, progress: computeMilestoneProgress({ status: m.status, tasks: countsToTasks(counts) }) };
+  });
+
+  let progress = goal.progress;
+  let metricCurrent = goal.metricCurrent;
+  if (goal.progressMode === "MILESTONES") {
+    progress = computeMilestonesGoalProgress(milestones);
+  } else {
+    // Only DONE contributions count, so the total moves when DONE is entered or left.
+    const amount = task.contribution ?? 0;
+    const sign = to === "DONE" ? 1 : from === "DONE" ? -1 : 0;
+    metricCurrent = roundToCents(metricCurrent + sign * amount);
+    progress = computeMetricProgress(metricCurrent, goal.metricTarget);
+  }
+  return { goal: { ...goal, milestones, progress, metricCurrent }, delta: progress - goal.progress };
+}
+
+/** Recompute a goal after one of its milestones changed (status or weight). */
+export function recomputeGoalFromMilestones<M extends MilestoneNode, G extends GoalLike<M>>(goal: G, milestones: M[]): G {
+  // In METRIC mode milestones are informational; progress comes from contributions.
+  const progress = goal.progressMode === "MILESTONES" ? computeMilestonesGoalProgress(milestones) : goal.progress;
+  return { ...goal, milestones, progress };
+}
+
+/** The task's next status, or null when the call would change nothing (same rule as the server). */
+export function nextStatus(current: TaskStatus, direction: CompletionDirection): TaskStatus | null {
+  if (direction === "complete") return current === "DONE" ? null : "DONE";
+  return current === "DONE" ? "TODO" : null;
+}
+
 /**
  * Apply completeTask / uncompleteTask to the cached day. Mirrors the server:
  * milestone progress via computeMilestoneProgress, then the goal via
@@ -104,36 +152,18 @@ export function applyTaskCompletion(
   const task = day.tasks.find((t) => t.id === taskId);
   const unchanged = { day, delta: 0, goalId: task?.goalId ?? null, changed: false };
   if (task === undefined) return unchanged;
-  if (direction === "complete" && task.status === "DONE") return unchanged;
-  if (direction === "uncomplete" && task.status !== "DONE") return unchanged;
+  const to = nextStatus(task.status, direction);
+  if (to === null) return unchanged;
 
-  const from = task.status;
-  const to: TaskStatus = direction === "complete" ? "DONE" : "TODO";
   const tasks = day.tasks.map((t) =>
-    t.id === taskId ? { ...t, status: to, completedAt: direction === "complete" ? now : null } : t,
+    t.id === taskId ? { ...t, status: to, completedAt: to === "DONE" ? now : null } : t,
   );
-
   let delta = 0;
   const goalTree = day.goalTree.map((goal) => {
     if (goal.id !== task.goalId) return goal;
-
-    const milestones = goal.milestones.map((m) => {
-      if (m.id !== task.milestoneId) return m;
-      const counts = moveCount(m.counts, from, to);
-      return { ...m, counts, progress: computeMilestoneProgress({ status: m.status, tasks: countsToTasks(counts) }) };
-    });
-
-    let progress = goal.progress;
-    let metricCurrent = goal.metricCurrent;
-    if (goal.progressMode === "MILESTONES") {
-      progress = computeMilestonesGoalProgress(milestones);
-    } else {
-      const amount = task.contribution ?? 0;
-      metricCurrent = roundToCents(metricCurrent + (direction === "complete" ? amount : -amount));
-      progress = computeMetricProgress(metricCurrent, goal.metricTarget);
-    }
-    delta = progress - goal.progress;
-    return { ...goal, milestones, progress, metricCurrent };
+    const result = applyStatusChangeToGoal(goal, task, task.status, to);
+    delta = result.delta;
+    return result.goal;
   });
 
   return { day: { ...day, tasks, goalTree }, delta, goalId: task.goalId, changed: true };
