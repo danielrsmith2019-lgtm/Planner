@@ -122,3 +122,17 @@ export function extractMentions(doc: unknown): ExtractedMention[] {
   walk(root, null);
   return found;
 }
+
+/** Block ids (attrs.id) in document order, for sorting a day's mentions top to bottom. */
+export function blockIdsInOrder(doc: unknown): string[] {
+  const root = asNode(doc);
+  if (root === null) return [];
+  const ids: string[] = [];
+  const walk = (node: JournalNode) => {
+    const id = stringAttr(node, "id");
+    if (id !== null && node.type !== "mention") ids.push(id);
+    for (const child of childrenOf(node)) walk(child);
+  };
+  walk(root);
+  return ids;
+}

@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma, type JournalEntry } from "@/generated/prisma/client";
 import { forUser } from "@/lib/db";
 import { toDayNumber, type LocalDate } from "@/lib/domain/dates";
-import { extractMentions, extractPlainText, type ExtractedMention } from "@/lib/domain/mentions";
+import { blockIdsInOrder, extractMentions, extractPlainText, type ExtractedMention } from "@/lib/domain/mentions";
 import { StaleEntryError, ValidationError } from "./errors";
 import type { Tx } from "./goals";
 import { fromLocalDate, toLocalDate } from "./mappers";
@@ -38,6 +38,8 @@ export type JournalEntryDTO = {
   mood: number | null;
   version: number;
   linkCount: number;
+  /** Goal color per mention id in this entry, so mention chips render in their goal's color. */
+  mentionColors: Record<string, string>;
 };
 
 const INTENTION_MAX_LENGTH = 500;
@@ -109,7 +111,7 @@ function toLinkRows(mentions: ExtractedMention[]): Prisma.JournalLinkCreateWitho
   }));
 }
 
-function toDTO(entry: JournalEntry, linkCount: number): JournalEntryDTO {
+function toDTO(entry: JournalEntry, linkCount: number, mentionColors: Record<string, string> = {}): JournalEntryDTO {
   return {
     id: entry.id,
     date: toLocalDate(entry.date),
@@ -119,6 +121,7 @@ function toDTO(entry: JournalEntry, linkCount: number): JournalEntryDTO {
     mood: entry.mood,
     version: entry.version,
     linkCount,
+    mentionColors,
   };
 }
 
@@ -158,7 +161,7 @@ export async function saveJournalEntry(
         const created = await tx.journalEntry.create({
           data: { userId, date: day, content, plainText, version: 1, ...optional, links: { create: links } },
         });
-        return toDTO(created, links.length);
+        return toDTO(created, links.length, await mentionColorsInTx(tx, created.id));
       }
 
       if (existing.version !== input.version) throw new StaleEntryError(date, input.version, existing.version);
@@ -175,7 +178,7 @@ export async function saveJournalEntry(
           links: { deleteMany: {}, create: links },
         },
       });
-      return toDTO(updated, links.length);
+      return toDTO(updated, links.length, await mentionColorsInTx(tx, updated.id));
     });
   } catch (error) {
     if (isUniqueViolation(error) || isRecordNotFound(error)) {
@@ -198,7 +201,7 @@ export async function getJournalEntry(userId: string, date: LocalDate): Promise<
   });
   if (entry === null) return null;
   const { _count, ...row } = entry;
-  return toDTO(row, _count.links);
+  return toDTO(row, _count.links, await getMentionColors(userId, row.id));
 }
 
 export type JournalDaySummary = {
@@ -222,4 +225,74 @@ export async function listJournalDays(userId: string, from: LocalDate, to: Local
     select: { date: true, mood: true, plainText: true },
   });
   return entries.map((e) => ({ date: toLocalDate(e.date), mood: e.mood, hasText: e.plainText.trim() !== "" }));
+}
+
+export type GoalReflection = {
+  linkId: string;
+  date: LocalDate;
+  blockId: string;
+  snippet: string;
+  /** The milestone this block mentioned, or null when it mentioned the goal itself. */
+  milestone: { id: string; title: string } | null;
+};
+
+/**
+ * Every journal block that mentioned a goal or one of its milestones,
+ * newest entry first (blueprint: the goal detail's reflection timeline).
+ */
+export async function getGoalReflections(userId: string, goalId: string): Promise<GoalReflection[]> {
+  const links = await forUser(userId).journalLink.findMany({
+    where: { OR: [{ goalId }, { milestone: { goalId } }] },
+    include: { entry: { select: { id: true, date: true, content: true } }, milestone: { select: { id: true, title: true } } },
+    orderBy: [{ entry: { date: "desc" } }, { id: "asc" }],
+    take: 200,
+  });
+  // Within an entry, top to bottom: the order the blocks appear in the document.
+  const positions = new Map<string, Map<string, number>>();
+  const positionOf = (entryId: string, content: unknown, blockId: string) => {
+    let order = positions.get(entryId);
+    if (order === undefined) {
+      order = new Map(blockIdsInOrder(content).map((id, index) => [id, index]));
+      positions.set(entryId, order);
+    }
+    return order.get(blockId) ?? Number.MAX_SAFE_INTEGER;
+  };
+  const sorted = [...links].sort((a, b) => {
+    const byDate = b.entry.date.getTime() - a.entry.date.getTime();
+    if (byDate !== 0) return byDate;
+    const byBlock = positionOf(a.entry.id, a.entry.content, a.blockId) - positionOf(b.entry.id, b.entry.content, b.blockId);
+    if (byBlock !== 0) return byBlock;
+    // Same block: the goal mention before its milestones.
+    return (a.milestone === null ? 0 : 1) - (b.milestone === null ? 0 : 1);
+  });
+  return sorted.map((link) => ({
+    linkId: link.id,
+    date: toLocalDate(link.entry.date),
+    blockId: link.blockId,
+    snippet: link.snippet,
+    milestone: link.milestone === null ? null : { id: link.milestone.id, title: link.milestone.title },
+  }));
+}
+
+/** Goal colors for the mentions already in an entry, keyed by mention id (for the chips). */
+export async function getMentionColors(userId: string, entryId: string): Promise<Record<string, string>> {
+  return forUser(userId).$transaction((tx) => mentionColorsInTx(tx, entryId));
+}
+
+async function mentionColorsInTx(tx: Tx, entryId: string): Promise<Record<string, string>> {
+  const links = await tx.journalLink.findMany({
+    where: { entryId },
+    select: {
+      goal: { select: { id: true, color: true } },
+      milestone: { select: { id: true, goal: { select: { color: true } } } },
+      task: { select: { id: true, goal: { select: { color: true } } } },
+    },
+  });
+  const colors: Record<string, string> = {};
+  for (const link of links) {
+    if (link.goal !== null) colors[link.goal.id] = link.goal.color;
+    if (link.milestone !== null) colors[link.milestone.id] = link.milestone.goal.color;
+    if (link.task?.goal != null) colors[link.task.id] = link.task.goal.color;
+  }
+  return colors;
 }

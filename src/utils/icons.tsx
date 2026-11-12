@@ -1,6 +1,8 @@
 import { createElement } from "react";
 import {
   AlertTriangle,
+  CircleCheck,
+  Flag,
   Bold,
   Frown,
   Heading2,
@@ -76,6 +78,9 @@ export const ICONS = {
   heading: Heading2,
   bulletList: List,
   checklist: ListChecks,
+  // Mention chips and the @ picker
+  milestone: Flag,
+  task: CircleCheck,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
@@ -114,6 +119,8 @@ export function Icon({
 
 export {
   AlertTriangle,
+  CircleCheck,
+  Flag,
   Bold,
   Frown,
   Heading2,

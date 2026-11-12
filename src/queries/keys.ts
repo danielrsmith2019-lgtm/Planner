@@ -7,6 +7,8 @@ export const queryKeys = {
   week: (startDate: LocalDate) => ["week", startDate] as const,
   goals: () => ["goals"] as const,
   goal: (id: string) => ["goal", id] as const,
+  /** Journal blocks mentioning a goal (its Reflections section). */
+  goalReflections: (id: string) => ["goalReflections", id] as const,
   journal: (date: LocalDate) => ["journal", date] as const,
   /** month is "YYYY-MM". */
   journalMonth: (month: string) => ["journalMonth", month] as const,

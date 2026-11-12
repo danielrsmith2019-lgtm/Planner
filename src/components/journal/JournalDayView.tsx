@@ -23,7 +23,7 @@ const isValidDate = (value: string) => {
  * formatting toolbar pinned above the keyboard. Desktop: a normal page with
  * previous / next day links.
  */
-export default function JournalDayView({ date }: { date: string }) {
+export default function JournalDayView({ date, focusBlockId = null }: { date: string; focusBlockId?: string | null }) {
   const desktop = useMediaQuery("(min-width: 768px)");
   const today = useUiStore((s) => s.today);
   const [status, setStatus] = useState<AutosaveStatus>({ state: "idle" });
@@ -51,13 +51,13 @@ export default function JournalDayView({ date }: { date: string }) {
           <SaveStatus status={status} className="pr-3" />
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-4">
-          <JournalEntryEditor date={date} toolbar="keyboard" onStatus={setStatus} />
+          <JournalEntryEditor date={date} toolbar="keyboard" onStatus={setStatus} focusBlockId={focusBlockId} />
         </div>
       </div>
     );
   }
 
-  return <DesktopDay date={date as LocalDate} label={label} status={status} onStatus={setStatus} />;
+  return <DesktopDay date={date as LocalDate} label={label} status={status} onStatus={setStatus} focusBlockId={focusBlockId} />;
 }
 
 function DesktopDay({
@@ -65,11 +65,13 @@ function DesktopDay({
   label,
   status,
   onStatus,
+  focusBlockId,
 }: {
   date: LocalDate;
   label: string;
   status: AutosaveStatus;
   onStatus: (status: AutosaveStatus) => void;
+  focusBlockId: string | null;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
@@ -88,7 +90,7 @@ function DesktopDay({
         </Link>
       </div>
       <section className="bc-card px-5 py-4">
-        <JournalEntryEditor date={date} onStatus={onStatus} />
+        <JournalEntryEditor date={date} onStatus={onStatus} focusBlockId={focusBlockId} />
       </section>
     </div>
   );

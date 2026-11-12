@@ -118,3 +118,5 @@ export const updateTaskInput = z.object({
   durationMin: z.number().int().min(1).max(1440).nullable().optional(),
   isTopThree: z.boolean().optional(),
 });
+
+export const mentionQueryInput = z.object({ query: z.string().max(100) });

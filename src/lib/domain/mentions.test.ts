@@ -184,3 +184,18 @@ describe("extractPlainText", () => {
     expect(extractPlainText(undefined)).toBe("");
   });
 });
+
+describe("blockIdsInOrder", () => {
+  it("lists block ids top to bottom, nested ones included, skipping mention ids", async () => {
+    const { blockIdsInOrder } = await import("./mentions");
+    const doc = {
+      type: "doc",
+      content: [
+        { type: "paragraph", attrs: { id: "p1" }, content: [{ type: "mention", attrs: { id: "goal-1", label: "G" } }] },
+        { type: "bulletList", content: [{ type: "listItem", attrs: { id: "li" }, content: [{ type: "paragraph", attrs: { id: "p2" } }] }] },
+      ],
+    };
+    expect(blockIdsInOrder(doc)).toEqual(["p1", "li", "p2"]);
+    expect(blockIdsInOrder(null)).toEqual([]);
+  });
+});

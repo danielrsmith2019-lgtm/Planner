@@ -1,8 +1,8 @@
 import { queryOptions } from "@tanstack/react-query";
-import { getJournalAction, getJournalMonthAction } from "@/actions/journal";
+import { getGoalReflectionsAction, getJournalAction, getJournalMonthAction } from "@/actions/journal";
 import { unwrap } from "@/actions/types";
 import type { LocalDate } from "@/lib/domain/dates";
-import type { JournalDaySummary, JournalEntryDTO } from "@/services/journal";
+import type { GoalReflection, JournalDaySummary, JournalEntryDTO } from "@/services/journal";
 import { queryKeys } from "./keys";
 
 /** The day's entry, or null when nothing has been written yet. */
@@ -19,3 +19,10 @@ export async function getJournalMonth(month: string): Promise<JournalDaySummary[
 
 export const journalMonthQuery = (month: string) =>
   queryOptions({ queryKey: queryKeys.journalMonth(month), queryFn: () => getJournalMonth(month) });
+
+export async function getGoalReflections(goalId: string): Promise<GoalReflection[]> {
+  return unwrap(await getGoalReflectionsAction({ goalId }));
+}
+
+export const goalReflectionsQuery = (goalId: string) =>
+  queryOptions({ queryKey: queryKeys.goalReflections(goalId), queryFn: () => getGoalReflections(goalId) });

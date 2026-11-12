@@ -21,6 +21,7 @@ import GoalHeader from "./GoalHeader";
 import LogProgressSheet from "./LogProgressSheet";
 import MilestoneActionsSheet from "./MilestoneActionsSheet";
 import MilestoneList from "./MilestoneList";
+import ReflectionsList from "./ReflectionsList";
 import TaskCheckRow from "./TaskCheckRow";
 
 /**
@@ -192,15 +193,11 @@ export default function GoalDetailView({ goalId }: { goalId: string }) {
         </section>
       )}
 
-      {/* Day 19: journal blocks that mention this goal land here. */}
       <section aria-labelledby="reflections-heading" className="flex flex-col gap-3">
         <h2 id="reflections-heading" className="bc-section-label">
           Reflections
         </h2>
-        <div className="bc-card bc-empty">
-          <Icon icon="journal" size={32} className="bc-empty-icon" />
-          <p className="bc-empty-text">Journal entries that mention this goal will show up here.</p>
-        </div>
+        <ReflectionsList goalId={goalId} color={data.color} />
       </section>
 
       {showPrompt && (

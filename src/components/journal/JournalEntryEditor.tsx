@@ -13,10 +13,14 @@ import type { JournalEntryDTO } from "@/services/journal";
 import { cn } from "@/utils/cn";
 import { createAutosaver, type AutosaveStatus, type SaveOutcome, type SaveRequest } from "./autosave";
 import EditorToolbar from "./EditorToolbar";
+import { MentionColorsContext } from "./mentions/MentionColors";
 import MoodSelector from "./MoodSelector";
 import ReflectionEditor from "./ReflectionEditor";
 
 export type ToolbarPlacement = "inline" | "keyboard";
+
+/** Height of the keyboard-pinned toolbar on phones; the @ sheet sits above it. */
+const KEYBOARD_TOOLBAR_PX = 54;
 
 /**
  * A day's journal entry: the reflection editor with autosave, tomorrow's
@@ -28,12 +32,15 @@ export default function JournalEntryEditor({
   toolbar = "inline",
   onStatus,
   autofocus = false,
+  focusBlockId = null,
 }: {
   date: LocalDate;
   toolbar?: ToolbarPlacement;
   /** Lets a page show the save status in its own header. */
   onStatus?: (status: AutosaveStatus) => void;
   autofocus?: boolean;
+  /** Scroll to and highlight this block (a goal's Reflections link). */
+  focusBlockId?: string | null;
 }) {
   const entry = useQuery(journalQuery(date));
   const [reloads, setReloads] = useState(0);
@@ -55,6 +62,7 @@ export default function JournalEntryEditor({
       toolbar={toolbar}
       onStatus={onStatus}
       autofocus={autofocus}
+      focusBlockId={focusBlockId}
       onReload={async () => {
         await entry.refetch();
         setReloads((n) => n + 1);
@@ -96,6 +104,7 @@ function EntryForm({
   toolbar,
   onStatus,
   autofocus,
+  focusBlockId,
   onReload,
 }: {
   date: LocalDate;
@@ -103,6 +112,7 @@ function EntryForm({
   toolbar: ToolbarPlacement;
   onStatus?: (status: AutosaveStatus) => void;
   autofocus: boolean;
+  focusBlockId: string | null;
   onReload: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
@@ -112,6 +122,9 @@ function EntryForm({
   const [editor, setEditor] = useState<Editor | null>(null);
   const [reloading, setReloading] = useState(false);
   const [unreadable, setUnreadable] = useState(false);
+  const [mentionColors, setMentionColors] = useState<ReadonlyMap<string, string>>(
+    () => new Map(Object.entries(entry?.mentionColors ?? {})),
+  );
   const keyboardInset = useKeyboardInset();
   const intentionId = useId();
   const initialContent = (entry?.content ?? EMPTY_DOC) as JSONContent;
@@ -128,6 +141,8 @@ function EntryForm({
         if (result.ok) {
           queryClient.setQueryData(queryKeys.journal(date), result.data);
           void queryClient.invalidateQueries({ queryKey: queryKeys.journalMonth(monthOf(date)) });
+          // New or removed mentions change goals' Reflections timelines.
+          void queryClient.invalidateQueries({ queryKey: ["goalReflections"] });
           return { ok: true, version: result.data.version };
         }
         if (result.error.code === "STALE") return { ok: false, stale: true, currentVersion: result.error.currentVersion ?? null };
@@ -138,6 +153,26 @@ function EntryForm({
   );
 
   useEffect(() => onStatus?.(status), [status, onStatus]);
+
+  // Opened from a goal's Reflections: scroll to that block and flash it. The
+  // flash is a temporary style rule, because ProseMirror redraws its own DOM
+  // and would drop a class added by hand.
+  const [flashing, setFlashing] = useState(false);
+  useEffect(() => {
+    if (editor === null || focusBlockId === null) return;
+    let clear: number | undefined;
+    const frame = requestAnimationFrame(() => {
+      const block = editor.view.dom.querySelector(`[data-id="${CSS.escape(focusBlockId)}"]`);
+      if (!(block instanceof HTMLElement)) return;
+      block.scrollIntoView({ block: "center", behavior: "smooth" });
+      setFlashing(true);
+      clear = window.setTimeout(() => setFlashing(false), 2400);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (clear !== undefined) window.clearTimeout(clear);
+    };
+  }, [editor, focusBlockId]);
 
   // Save right away when the tab is hidden or this entry closes.
   useEffect(() => {
@@ -164,6 +199,9 @@ function EntryForm({
 
   return (
     <div className="flex flex-col gap-5">
+      {flashing && focusBlockId !== null && (
+        <style>{`.journal-prose [data-id="${focusBlockId.replace(/["\\]/g, "")}"] { animation: journal-flash 2.4s ease-out; border-radius: 6px; }`}</style>
+      )}
       {stale && (
         <div role="alert" className="flex items-center gap-3 rounded-[14px] bg-bc-orange-light py-1 pr-1 pl-4 text-bc-orange-dark">
           <p className="flex-1 py-2 text-[14px] font-medium">This entry changed on another device.</p>
@@ -190,16 +228,22 @@ function EntryForm({
       {toolbar === "inline" && <EditorToolbar editor={editor} className="-ml-2 border-b border-border pb-1" />}
 
       <div className={cn(locked && "pointer-events-none opacity-60")} aria-disabled={locked}>
+        <MentionColorsContext value={mentionColors}>
         <ReflectionEditor
           initialContent={initialContent}
           onChange={onContent}
           onReady={setEditor}
           autofocus={autofocus}
+          onMentionPicked={(item) => {
+            if (item.color !== null) setMentionColors((current) => new Map(current).set(item.id, item.color ?? ""));
+          }}
+          menuBottomOffset={toolbar === "keyboard" ? KEYBOARD_TOOLBAR_PX : 0}
           onContentError={() => {
             saver.dispose();
             setUnreadable(true);
           }}
         />
+        </MentionColorsContext>
       </div>
 
       <div className="flex flex-col gap-1.5">
