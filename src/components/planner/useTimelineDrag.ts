@@ -3,6 +3,7 @@
 import {
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   pointerWithin,
   rectIntersection,
   useSensor,
@@ -12,7 +13,9 @@ import {
   type DragMoveEvent,
   type DragStartEvent,
   type KeyboardCoordinateGetter,
+  type PointerSensorOptions,
 } from "@dnd-kit/core";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { LocalDate } from "@/lib/domain/dates";
 import { samePlacement, type Placement } from "@/lib/domain/day-schedule";
@@ -29,6 +32,27 @@ const quarterHourKeys: KeyboardCoordinateGetter = (event, { currentCoordinates }
   if (event.code === "ArrowUp") return { ...currentCoordinates, y: currentCoordinates.y - step };
   return undefined;
 };
+
+/**
+ * Mouse and pen only. Touch goes through TouchSensor (long press), which only
+ * timeline blocks listen for, so a finger on a list row scrolls or swipes
+ * instead of starting a drag.
+ */
+class MouseAndPenSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: "onPointerDown" as const,
+      handler: ({ nativeEvent: event }: ReactPointerEvent, { onActivation }: PointerSensorOptions) => {
+        if (event.pointerType === "touch" || !event.isPrimary || event.button !== 0) return false;
+        onActivation?.({ event });
+        return true;
+      },
+    },
+  ];
+}
+
+/** Auto-scroll the timeline (and page) when a drag nears the top or bottom 15%. */
+export const AUTO_SCROLL = { threshold: { x: 0, y: 0.15 }, acceleration: 12 } as const;
 
 /** Pointer first (the grid is one droppable); rect overlap for keyboard drags. */
 const collisionDetection: CollisionDetection = (args) => {
@@ -67,7 +91,9 @@ export function useTimelineDrag({
   onDrop: (intent: DropIntent) => void;
 }) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(MouseAndPenSensor, { activationConstraint: { distance: 4 } }),
+    // Phones: long-press (250ms, 5px tolerance) a timeline block to drag it.
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: quarterHourKeys,
       // Enter stays "toggle done" on blocks.
@@ -85,8 +111,16 @@ export function useTimelineDrag({
     const onMove = (event: PointerEvent) => {
       pointerY.current = event.clientY;
     };
+    const onTouch = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (touch !== undefined) pointerY.current = touch.clientY;
+    };
     window.addEventListener("pointermove", onMove);
-    return () => window.removeEventListener("pointermove", onMove);
+    window.addEventListener("touchmove", onTouch, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("touchmove", onTouch);
+    };
   }, [active]);
 
   const intentFor = (event: DragMoveEvent | DragEndEvent): DropIntent | null => {
@@ -132,7 +166,11 @@ export function useTimelineDrag({
       const data = event.active.data.current as DragData | undefined;
       const startY = clientYOf(event.activatorEvent);
       pointerY.current = startY;
-      const initialTop = event.active.rect.current.initial?.top;
+      // dnd-kit hasn't measured the dragged node yet at this point
+      // (active.rect.current.initial is still null), so measure the grabbed block directly.
+      const target = event.activatorEvent?.target;
+      const node = target instanceof Element ? target.closest("[data-drag-node]") : null;
+      const initialTop = node?.getBoundingClientRect().top;
       grabOffset.current = startY !== null && initialTop !== undefined ? startY - initialTop : 0;
       setActive(data ?? null);
     },

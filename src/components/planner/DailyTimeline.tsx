@@ -36,8 +36,12 @@ export type DailyTimelineProps = {
   showNow: boolean;
   timezone: string | null;
   onToggle: (task: DayTask) => void;
-  /** Desktop only: blocks can be dragged and resized. */
+  /** Blocks can be dragged (mouse on desktop, long-press on phones). */
   dragEnabled: boolean;
+  /** Desktop only: bottom-edge resize handles. Phones change duration in the sheet. */
+  resizeEnabled: boolean;
+  /** What tapping a block does (phones open the schedule sheet). Defaults to onToggle. */
+  onBlockTap?: (task: DayTask) => void;
   /** Filled every render so the page can map pointer Y to minutes. */
   geometryRef: MutableRefObject<TimelineGeometry | null>;
   /** The dashed drop target while something is dragged over the grid. */
@@ -93,6 +97,8 @@ export default function DailyTimeline({
   timezone,
   onToggle,
   dragEnabled,
+  resizeEnabled,
+  onBlockTap,
   geometryRef,
   preview,
   draggingId,
@@ -165,9 +171,11 @@ export default function DailyTimeline({
               width={`${100 / columns}%`}
               range={`${minutesToLabel(startMin)} - ${minutesToLabel(endMin % 1440)}`}
               dragEnabled={dragEnabled}
+              resizeEnabled={resizeEnabled}
               dimmed={draggingId === task.id}
               selected={selectedId === task.id}
               onToggle={onToggle}
+              onTap={onBlockTap ?? onToggle}
             />
           ))}
         </ol>
@@ -219,9 +227,11 @@ function TimelineBlock({
   width,
   range,
   dragEnabled,
+  resizeEnabled,
   dimmed,
   selected,
   onToggle,
+  onTap,
 }: {
   task: TimedTask;
   goal: GoalNode | undefined;
@@ -231,9 +241,11 @@ function TimelineBlock({
   width: string;
   range: string;
   dragEnabled: boolean;
+  resizeEnabled: boolean;
   dimmed: boolean;
   selected: boolean;
   onToggle: (task: DayTask) => void;
+  onTap: (task: DayTask) => void;
 }) {
   const data: DragData = { type: "timeline-block", task };
   const {
@@ -246,7 +258,7 @@ function TimelineBlock({
     setNodeRef: setResizeRef,
     attributes: resizeAttributes,
     listeners: resizeListeners,
-  } = useDraggable({ id: `resize:${task.id}`, data: resizeData, disabled: !dragEnabled });
+  } = useDraggable({ id: `resize:${task.id}`, data: resizeData, disabled: !resizeEnabled });
   const shades = goal !== undefined && isGoalColor(goal.color) ? goalShades(goal.color) : null;
   const done = task.status === "DONE";
 
@@ -265,14 +277,16 @@ function TimelineBlock({
         ref={setMoveRef}
         {...moveAttributes}
         {...moveListeners}
+        data-drag-node
         role="checkbox"
         aria-checked={done}
         aria-roledescription={dragEnabled ? "draggable block" : undefined}
         aria-label={`${task.title}, ${range}${goal === undefined ? "" : `, ${goal.title}`}`}
         onKeyDown={onKeyDown}
-        onClick={() => onToggle(task)}
+        onClick={() => onTap(task)}
         className={cn(
-          "group relative flex h-full w-full items-start gap-1.5 overflow-hidden rounded-[8px] border-l-[3px] px-2 text-left outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-bc-blue",
+          // touch-manipulation: the page still scrolls until a long press starts a drag.
+          "group relative touch-manipulation flex h-full w-full items-start gap-1.5 overflow-hidden rounded-[8px] border-l-[3px] px-2 text-left outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-bc-blue",
           height >= 36 ? "py-1.5" : "items-center py-0",
           dragEnabled ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
           done && "opacity-55",
@@ -293,7 +307,7 @@ function TimelineBlock({
           </span>
           {height >= 36 && <span className="block truncate text-[11px] leading-tight opacity-75">{range}</span>}
         </span>
-        {dragEnabled && (
+        {resizeEnabled && (
           <span
             ref={setResizeRef}
             {...resizeAttributes}

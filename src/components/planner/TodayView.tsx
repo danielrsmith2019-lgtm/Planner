@@ -25,8 +25,9 @@ import GoalStrip, { type RingDelta } from "./GoalStrip";
 import TaskForm from "./TaskForm";
 import { taskFormFromTask } from "./task-form";
 import TaskRow from "./TaskRow";
+import ScheduleSheet from "./ScheduleSheet";
 import UndoToast, { type UndoAction } from "./UndoToast";
-import { useTimelineDrag, type DropIntent } from "./useTimelineDrag";
+import { AUTO_SCROLL, useTimelineDrag, type DropIntent } from "./useTimelineDrag";
 
 const TASK_FORM_ID = "new-task-form";
 const EDIT_FORM_ID = "edit-task-form";
@@ -99,6 +100,7 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
   const [formOpen, setFormOpen] = useState(false);
   const [formTopThree, setFormTopThree] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [carryOpen, setCarryOpen] = useState(false);
   const [backlogOpen, setBacklogOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -119,6 +121,9 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
   const findTask = (id: string | null) => (id === null ? undefined : allTasks.find((t) => t.id === id));
   const unfinished = isToday && carryOver.isSuccess ? carryOver.data.tasks : [];
   const editing = findTask(editingId);
+  const scheduling = findTask(schedulingId) ?? null;
+  /** Phones: tap or swipe left on a row (or tap a block) to open the schedule sheet. */
+  const openSchedule = (task: DayTask) => setSchedulingId(task.id);
   const dismissUndo = useCallback(() => setUndo(null), []);
   const offerUndo = (label: string, run: () => void) => setUndo((prev) => ({ id: (prev?.id ?? 0) + 1, label, undo: run }));
 
@@ -165,7 +170,7 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
   // Keyboard: J/K select, X complete, E edit, Delete to backlog, Cmd/Ctrl+Z undo.
   const keyState = useRef({ order, selectedId, undo, toggle, placeTask, findTask, sheetOpen: false });
   useEffect(() => {
-    keyState.current = { order, selectedId, undo, toggle, placeTask, findTask, sheetOpen: formOpen || editingId !== null || carryOpen };
+    keyState.current = { order, selectedId, undo, toggle, placeTask, findTask, sheetOpen: formOpen || editingId !== null || carryOpen || schedulingId !== null };
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -226,6 +231,8 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
         onToggle={(t) => toggle(t)}
         dragEnabled={desktop}
         selected={selectedId === task.id}
+        onOpen={desktop ? undefined : openSchedule}
+        onSchedule={desktop ? undefined : openSchedule}
       />
     );
   };
@@ -242,6 +249,7 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
       onDragMove={drag.onDragMove}
       onDragEnd={drag.onDragEnd}
       onDragCancel={drag.onDragCancel}
+      autoScroll={AUTO_SCROLL}
     >
       <div
         data-wide
@@ -344,19 +352,20 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
                 showNow={isToday}
                 timezone={timezone}
                 onToggle={(t) => toggle(t)}
-                dragEnabled={desktop}
+                dragEnabled
+                resizeEnabled={desktop}
+                onBlockTap={desktop ? undefined : openSchedule}
                 geometryRef={geometryRef}
                 preview={drag.preview}
                 draggingId={draggingTask?.id ?? null}
                 selectedId={selectedId}
               />
             </div>
-            {desktop && (
-              <p className="bc-caption">
-                Drag tasks onto the timeline; drag a block&apos;s bottom edge to resize. Keys: J/K select, X complete, E edit, Delete to
-                backlog, Ctrl+Z undo.
-              </p>
-            )}
+            <p className="bc-caption">
+              {desktop
+                ? "Drag tasks onto the timeline; drag a block's bottom edge to resize. Keys: J/K select, X complete, E edit, Delete to backlog, Ctrl+Z undo."
+                : "Long-press a block to move it; tap it to change the time or length. Swipe a task right to complete, left to schedule."}
+            </p>
           </section>
 
           {/* Phones: the backlog sits at the end, collapsed. */}
@@ -377,7 +386,7 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
               </button>
               {backlogOpen && (
                 <div id="backlog-list" className="bc-card-flush overflow-hidden">
-                  <BacklogList tasks={data.backlog} goals={data.goalTree} onToggle={(t) => toggle(t)} />
+                  <BacklogList tasks={data.backlog} goals={data.goalTree} onToggle={(t) => toggle(t)} onSchedule={openSchedule} />
                 </div>
               )}
             </section>
@@ -405,6 +414,23 @@ function TodayBoard({ date, today, data }: { date: LocalDate; today: LocalDate; 
       </DragOverlay>
 
       <UndoToast action={undo} onDismiss={dismissUndo} />
+
+      <ScheduleSheet
+        task={scheduling}
+        today={today}
+        timezone={timezone}
+        onOpenChange={(open) => {
+          if (!open) setSchedulingId(null);
+        }}
+        onSave={(task, placement) => {
+          setSchedulingId(null);
+          placeTask(task, placement, "timeline-block");
+        }}
+        onToggleDone={(task) => {
+          setSchedulingId(null);
+          toggle(task);
+        }}
+      />
 
       <BottomSheet
         open={formOpen}

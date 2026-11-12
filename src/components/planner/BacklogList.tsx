@@ -10,12 +10,15 @@ export default function BacklogList({
   onToggle,
   dragEnabled = false,
   selectedId = null,
+  onSchedule,
 }: {
   tasks: DayTask[];
   goals: GoalNode[];
   onToggle: (task: DayTask) => void;
   dragEnabled?: boolean;
   selectedId?: string | null;
+  /** Phones: tap or swipe left opens the schedule sheet. */
+  onSchedule?: (task: DayTask) => void;
 }) {
   const goalById = new Map(goals.map((g) => [g.id, g]));
   if (tasks.length === 0) return <p className="bc-label px-4 py-3">No unscheduled tasks.</p>;
@@ -32,6 +35,8 @@ export default function BacklogList({
             onToggle={onToggle}
             dragEnabled={dragEnabled}
             selected={selectedId === task.id}
+            onOpen={onSchedule}
+            onSchedule={onSchedule}
           />
         );
       })}
