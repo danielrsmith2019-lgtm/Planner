@@ -39,6 +39,7 @@ const task = (id: string, milestoneId: string): DayTask => ({
 const day = (): DayData => ({
   date: DATE,
   tasks: [task("a1", "m1"), task("a2", "m1"), task("b1", "m2")],
+  backlog: [],
   goalTree: [
     {
       id: "g1",

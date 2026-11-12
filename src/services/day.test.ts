@@ -34,7 +34,7 @@ describe("getDay", () => {
   it("doesn't see another user's rows", async () => {
     await setup();
     const other = await seedUser();
-    expect(await getDay(other.id, DATE)).toEqual({ date: DATE, tasks: [], goalTree: [] });
+    expect(await getDay(other.id, DATE)).toEqual({ date: DATE, tasks: [], backlog: [], goalTree: [] });
   });
 
   // The guarantee the optimistic update depends on: applying a completion to

@@ -58,7 +58,14 @@ export type DayTask = {
   completedAt: Date | null;
 };
 
-export type DayData = { date: LocalDate; tasks: DayTask[]; goalTree: GoalNode[] };
+export type DayData = {
+  date: LocalDate;
+  /** Tasks scheduled on this day, in rank order. */
+  tasks: DayTask[];
+  /** Unscheduled TODO tasks (scheduledDate null), in rank order. */
+  backlog: DayTask[];
+  goalTree: GoalNode[];
+};
 
 export type CompletionDirection = "complete" | "uncomplete";
 
@@ -149,15 +156,15 @@ export function applyTaskCompletion(
   direction: CompletionDirection,
   now: Date,
 ): OptimisticCompletion {
-  const task = day.tasks.find((t) => t.id === taskId);
+  const task = day.tasks.find((t) => t.id === taskId) ?? day.backlog.find((t) => t.id === taskId);
   const unchanged = { day, delta: 0, goalId: task?.goalId ?? null, changed: false };
   if (task === undefined) return unchanged;
   const to = nextStatus(task.status, direction);
   if (to === null) return unchanged;
 
-  const tasks = day.tasks.map((t) =>
-    t.id === taskId ? { ...t, status: to, completedAt: to === "DONE" ? now : null } : t,
-  );
+  const flip = (t: DayTask): DayTask => (t.id === taskId ? { ...t, status: to, completedAt: to === "DONE" ? now : null } : t);
+  const tasks = day.tasks.map(flip);
+  const backlog = day.backlog.map(flip);
   let delta = 0;
   const goalTree = day.goalTree.map((goal) => {
     if (goal.id !== task.goalId) return goal;
@@ -166,7 +173,7 @@ export function applyTaskCompletion(
     return result.goal;
   });
 
-  return { day: { ...day, tasks, goalTree }, delta, goalId: task.goalId, changed: true };
+  return { day: { ...day, tasks, backlog, goalTree }, delta, goalId: task.goalId, changed: true };
 }
 
 /** What the completion Server Action returns, reduced to what the cache needs. */
@@ -184,6 +191,7 @@ export function applyServerCompletion(day: DayData, result: ServerCompletion): D
   return {
     ...day,
     tasks: day.tasks.map((t) => (t.id === result.task.id ? result.task : t)),
+    backlog: day.backlog.map((t) => (t.id === result.task.id ? result.task : t)),
     goalTree: day.goalTree.map((goal) => {
       if (result.goal === null || goal.id !== result.goal.id) return goal;
       return {

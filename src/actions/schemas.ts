@@ -99,3 +99,9 @@ export const logProgressInput = z.object({
   amount: z.number({ error: "Enter an amount." }).finite().positive("Enter an amount above 0.").max(1_000_000),
   title: z.string().trim().max(200).nullish(),
 });
+
+export const resolveCarryOverInput = z.object({
+  keep: z.array(idSchema).max(200),
+  reschedule: z.array(z.object({ taskId: idSchema, date: localDateSchema })).max(200),
+  drop: z.array(idSchema).max(200),
+});

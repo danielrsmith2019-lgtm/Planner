@@ -32,6 +32,7 @@ const day = (): DayData => ({
     task({ id: "loose", goalId: null, milestoneId: null }),
     task({ id: "already", status: "DONE", completedAt: NOW }),
   ],
+  backlog: [],
   goalTree: [
     {
       id: "g1",
@@ -110,6 +111,16 @@ describe("applyTaskCompletion", () => {
     start.goalTree[0].milestones[0].progress = 0.95;
     const result = applyTaskCompletion(start, "t1", "complete", NOW);
     expect(result.day.goalTree[0].milestones[0].counts).toEqual({ todo: 0, done: 2, skipped: 0 });
+  });
+
+  it("completes a backlog task and moves its goal", () => {
+    const start = day();
+    start.backlog = [task({ id: "someday", milestoneId: "m2", scheduledDate: null })];
+    start.goalTree[0].milestones[1].counts = { todo: 2, done: 0, skipped: 0 };
+    const result = applyTaskCompletion(start, "someday", "complete", NOW);
+    expect(result.day.backlog[0].status).toBe("DONE");
+    expect(result.day.goalTree[0].milestones[1].counts).toEqual({ todo: 1, done: 1, skipped: 0 });
+    expect(result.delta).toBeGreaterThan(0);
   });
 
   it("doesn't mutate its input", () => {

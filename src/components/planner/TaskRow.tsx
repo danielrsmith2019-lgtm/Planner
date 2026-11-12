@@ -1,0 +1,68 @@
+"use client";
+
+import { formatDuration } from "@/lib/domain/day-lists";
+import { minutesToLabel } from "@/lib/domain/dates";
+import type { DayTask } from "@/lib/domain/goal-tree";
+import { cn } from "@/utils/cn";
+import { Icon } from "@/utils/icons";
+
+/**
+ * A task on Today: 44px checkbox, title, goal-color dot, start time when it
+ * has one, and a duration pill. The checkbox runs useCompleteTask.
+ */
+export default function TaskRow({
+  task,
+  goalColor,
+  goalTitle,
+  onToggle,
+}: {
+  task: DayTask;
+  /** Undefined for tasks with no goal. */
+  goalColor?: string;
+  goalTitle?: string;
+  onToggle: (task: DayTask) => void;
+}) {
+  const done = task.status === "DONE";
+  const accent = goalColor ?? "var(--color-fg-tertiary)";
+  return (
+    <li className="flex min-h-14 items-center gap-1 pr-3">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={done}
+        aria-label={task.title}
+        onClick={() => onToggle(task)}
+        className="flex size-11 shrink-0 items-center justify-center rounded-full"
+      >
+        <span
+          className="flex size-[22px] items-center justify-center rounded-full border-2 transition-colors"
+          style={{ borderColor: accent, background: done ? accent : "transparent" }}
+        >
+          {done && <Icon icon="complete" size={13} strokeWidth={3} className="text-white" />}
+        </span>
+      </button>
+      <div className="min-w-0 flex-1 py-2">
+        <p className={cn("truncate text-[15px]", done ? "text-fg-tertiary line-through" : "text-fg")}>{task.title}</p>
+        {(goalTitle !== undefined || task.startMin !== null || task.carryCount > 0) && (
+          <p className="bc-caption flex min-w-0 items-center gap-1.5">
+            {goalColor !== undefined && (
+              <span className="size-2 shrink-0 rounded-full" style={{ background: goalColor }} aria-hidden="true" />
+            )}
+            <span className="truncate">
+              {[
+                task.startMin === null ? null : minutesToLabel(task.startMin),
+                goalTitle ?? null,
+                task.carryCount > 0 ? `Carried ${task.carryCount}x` : null,
+              ]
+                .filter((part): part is string => part !== null)
+                .join(" · ")}
+            </span>
+          </p>
+        )}
+      </div>
+      {task.durationMin !== null && (
+        <span className="bc-pill shrink-0 bg-surface-alt text-fg-secondary">{formatDuration(task.durationMin)}</span>
+      )}
+    </li>
+  );
+}

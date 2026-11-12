@@ -6,4 +6,6 @@ export const queryKeys = {
   goals: () => ["goals"] as const,
   goal: (id: string) => ["goal", id] as const,
   journal: (date: LocalDate) => ["journal", date] as const,
+  /** Unfinished tasks from before today (carry-over banner). */
+  carryOver: () => ["carryOver"] as const,
 };

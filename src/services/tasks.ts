@@ -4,10 +4,12 @@ import type { Prisma } from "@/generated/prisma/client";
 import { forUser } from "@/lib/db";
 import { getLocalToday, toDayNumber, type LocalDate } from "@/lib/domain/dates";
 import { rankAfter, ranksAfter } from "@/lib/domain/rank";
+import { MAX_TOP_THREE, TOP_THREE_FULL_MESSAGE } from "@/lib/domain/day-lists";
 import { NotFoundError, ValidationError } from "./errors";
 import { recomputeGoalInTx, recomputeMilestoneInTx, type Tx } from "./goals";
 import {
   fromLocalDate,
+  toLocalDate as toLocalDateString,
   toGoalDTO,
   toMilestoneDTO,
   toTaskDTO,
@@ -213,6 +215,7 @@ export async function createTask(userId: string, input: CreateTaskInput): Promis
 
   return forUser(userId).$transaction(async (tx) => {
     const { goalId, milestoneId } = await resolveLink(tx, input.link ?? null);
+    if (input.isTopThree === true) await assertTopThreeRoom(tx, scheduledDate);
 
     let rank = input.rank;
     if (rank === undefined) {
@@ -337,65 +340,215 @@ export async function carryOverTasks(
   }
   const uniqueIds = [...new Set(taskIds)];
   if (uniqueIds.length === 0) return { carried: [], skippedIds: [] };
+  return forUser(userId).$transaction((tx) => carryOverInTx(tx, userId, fromDate, toDate, uniqueIds, now));
+}
 
-  return forUser(userId).$transaction(async (tx) => {
-    const from = fromLocalDate(fromDate);
-    const to = fromLocalDate(toDate);
+/** carryOverTasks inside a caller's transaction (dates already checked). */
+async function carryOverInTx(
+  tx: Tx,
+  userId: string,
+  fromDate: LocalDate,
+  toDate: LocalDate,
+  uniqueIds: readonly string[],
+  now: Date,
+): Promise<CarryOverResult> {
+  const from = fromLocalDate(fromDate);
+  const to = fromLocalDate(toDate);
 
-    const candidates = await tx.task.findMany({
-      where: { id: { in: uniqueIds }, status: "TODO", scheduledDate: from },
-      orderBy: { rank: "asc" },
+  const candidates = await tx.task.findMany({
+    where: { id: { in: [...uniqueIds] }, status: "TODO", scheduledDate: from },
+    orderBy: { rank: "asc" },
+  });
+
+  // A recurring task can't have two instances on the same day.
+  const parentIds = candidates.flatMap((t) => (t.recurrenceParentId === null ? [] : [t.recurrenceParentId]));
+  const blockedParents = new Set(
+    parentIds.length === 0
+      ? []
+      : (
+          await tx.task.findMany({
+            where: { recurrenceParentId: { in: parentIds }, scheduledDate: to },
+            select: { recurrenceParentId: true },
+          })
+        ).map((t) => t.recurrenceParentId),
+  );
+  const movable = candidates.filter((t) => t.recurrenceParentId === null || !blockedParents.has(t.recurrenceParentId));
+
+  if (movable.length === 0) return { carried: [], skippedIds: [...uniqueIds] };
+
+  const last = await tx.task.findFirst({
+    where: { scheduledDate: to },
+    orderBy: { rank: "desc" },
+    select: { rank: true },
+  });
+  const ranks = ranksAfter(last?.rank ?? null, movable.length);
+  const localDate = fromLocalDate(await userToday(tx, userId, now));
+  // Top 3 stays at most 3 per day: a carried Top 3 task keeps its flag only while there's room.
+  let topThreeRoom = MAX_TOP_THREE - (await countTopThree(tx, toDate));
+
+  const carried: TaskDTO[] = [];
+  for (const [index, task] of movable.entries()) {
+    const keepTopThree = task.isTopThree && topThreeRoom > 0;
+    if (keepTopThree) topThreeRoom -= 1;
+    const updated = await tx.task.update({
+      where: { id: task.id },
+      data: {
+        scheduledDate: to,
+        startMin: null,
+        rank: ranks[index],
+        carryCount: { increment: 1 },
+        isTopThree: keepTopThree,
+      },
     });
-
-    // A recurring task can't have two instances on the same day.
-    const parentIds = candidates.flatMap((t) => (t.recurrenceParentId === null ? [] : [t.recurrenceParentId]));
-    const blockedParents = new Set(
-      parentIds.length === 0
-        ? []
-        : (
-            await tx.task.findMany({
-              where: { recurrenceParentId: { in: parentIds }, scheduledDate: to },
-              select: { recurrenceParentId: true },
-            })
-          ).map((t) => t.recurrenceParentId),
-    );
-    const movable = candidates.filter((t) => t.recurrenceParentId === null || !blockedParents.has(t.recurrenceParentId));
-
-    if (movable.length === 0) return { carried: [], skippedIds: uniqueIds };
-
-    const last = await tx.task.findFirst({
-      where: { scheduledDate: to },
-      orderBy: { rank: "desc" },
-      select: { rank: true },
+    await tx.activityEvent.create({
+      data: {
+        userId,
+        type: "TASK_CARRIED",
+        localDate,
+        taskId: task.id,
+        goalId: task.goalId,
+        milestoneId: task.milestoneId,
+        payload: { from: fromDate, to: toDate, carryCount: updated.carryCount },
+      },
     });
-    const ranks = ranksAfter(last?.rank ?? null, movable.length);
-    const localDate = fromLocalDate(await userToday(tx, userId, now));
+    carried.push(toTaskDTO(updated));
+  }
 
-    const carried: TaskDTO[] = [];
-    for (const [index, task] of movable.entries()) {
-      const updated = await tx.task.update({
-        where: { id: task.id },
-        data: { scheduledDate: to, startMin: null, rank: ranks[index], carryCount: { increment: 1 } },
-      });
-      await tx.activityEvent.create({
-        data: {
-          userId,
-          type: "TASK_CARRIED",
-          localDate,
-          taskId: task.id,
-          goalId: task.goalId,
-          milestoneId: task.milestoneId,
-          payload: { from: fromDate, to: toDate, carryCount: updated.carryCount },
-        },
-      });
-      carried.push(toTaskDTO(updated));
-    }
+  const movedIds = new Set(movable.map((t) => t.id));
+  return { carried, skippedIds: uniqueIds.filter((id) => !movedIds.has(id)) };
+}
 
-    const movedIds = new Set(movable.map((t) => t.id));
-    return { carried, skippedIds: uniqueIds.filter((id) => !movedIds.has(id)) };
+// ---------------------------------------------------------------------------
+// Top 3
+// ---------------------------------------------------------------------------
+
+/** Top 3 tasks on a day, not counting skipped ones. */
+async function countTopThree(tx: Tx, date: LocalDate, excludeTaskId?: string): Promise<number> {
+  return tx.task.count({
+    where: {
+      scheduledDate: fromLocalDate(date),
+      isTopThree: true,
+      status: { not: "SKIPPED" },
+      ...(excludeTaskId === undefined ? {} : { id: { not: excludeTaskId } }),
+    },
   });
 }
 
+async function assertTopThreeRoom(tx: Tx, date: LocalDate | null, excludeTaskId?: string) {
+  if (date === null) throw new ValidationError("Top 3 is for a specific day. Pick a date first.");
+  if ((await countTopThree(tx, date, excludeTaskId)) >= MAX_TOP_THREE) throw new ValidationError(TOP_THREE_FULL_MESSAGE);
+}
+
+// ---------------------------------------------------------------------------
+// Unfinished tasks from earlier days (morning carry-over)
+// ---------------------------------------------------------------------------
+
+export type UnfinishedTasks = {
+  /** The user's today, the cutoff. */
+  today: LocalDate;
+  /** TODO tasks scheduled before today, oldest first. */
+  tasks: TaskDTO[];
+};
+
+export async function getUnfinishedTasks(userId: string, { now = new Date() }: ServiceOptions = {}): Promise<UnfinishedTasks> {
+  return forUser(userId).$transaction(async (tx) => {
+    const today = await userToday(tx, userId, now);
+    const tasks = await tx.task.findMany({
+      where: { status: "TODO", scheduledDate: { lt: fromLocalDate(today) } },
+      orderBy: [{ scheduledDate: "asc" }, { rank: "asc" }],
+      take: 200,
+    });
+    return { today, tasks: tasks.map(toTaskDTO) };
+  });
+}
+
+/** Mark a TODO task SKIPPED inside a transaction, recompute, and log TASK_SKIPPED. */
+async function skipTaskInTx(tx: Tx, userId: string, taskId: string, now: Date): Promise<boolean> {
+  const task = await tx.task.findUnique({ where: { id: taskId } });
+  if (task === null) return false;
+  const flipped = await tx.task.updateMany({ where: { id: taskId, status: "TODO" }, data: { status: "SKIPPED" } });
+  if (flipped.count === 0) return false;
+  const { goal } = await recomputeFor(tx, task.milestoneId, task.goalId);
+  await tx.activityEvent.create({
+    data: {
+      userId,
+      type: "TASK_SKIPPED",
+      localDate: fromLocalDate(await userToday(tx, userId, now)),
+      taskId,
+      goalId: task.goalId,
+      milestoneId: task.milestoneId,
+      ...(goal === null ? {} : { payload: { before: goal.before, after: goal.after, delta: goal.after - goal.before } }),
+    },
+  });
+  return true;
+}
+
+export type CarryOverDecisions = {
+  /** Move to today. */
+  keep: readonly string[];
+  /** Move to another day (today or later). */
+  reschedule: readonly { taskId: string; date: LocalDate }[];
+  /** Mark SKIPPED. Skipped tasks drop out of milestone progress. */
+  drop: readonly string[];
+};
+
+export type CarryOverResolution = {
+  carried: TaskDTO[];
+  droppedIds: string[];
+  /** Ids that weren't unfinished from before today (already handled elsewhere). */
+  ignoredIds: string[];
+};
+
+/**
+ * The carry-over sheet's Apply: keep, reschedule or drop each unfinished task
+ * in one transaction. Moves go through carryOverInTx (one call per original
+ * day and target), so they get carryCount, TASK_CARRIED and Top 3 handling.
+ */
+export async function resolveCarryOver(
+  userId: string,
+  decisions: CarryOverDecisions,
+  { now = new Date() }: ServiceOptions = {},
+): Promise<CarryOverResolution> {
+  for (const { date } of decisions.reschedule) assertLocalDate(date, "date");
+  const allIds = [...decisions.keep, ...decisions.reschedule.map((r) => r.taskId), ...decisions.drop];
+  if (new Set(allIds).size !== allIds.length) throw new ValidationError("Each task needs exactly one choice.");
+
+  return forUser(userId).$transaction(async (tx) => {
+    const today = await userToday(tx, userId, now);
+    for (const { date } of decisions.reschedule) {
+      if (toDayNumber(date) < toDayNumber(today)) throw new ValidationError("Pick today or a later day.");
+    }
+    const unfinished = await tx.task.findMany({
+      where: { id: { in: allIds }, status: "TODO", scheduledDate: { lt: fromLocalDate(today) } },
+      select: { id: true, scheduledDate: true },
+    });
+    const fromById = new Map(unfinished.flatMap((t) => (t.scheduledDate === null ? [] : [[t.id, toLocalDateString(t.scheduledDate)] as const])));
+
+    // Group moves by (from day, to day) so each carryOverInTx call is one hop.
+    const moves = new Map<string, { from: LocalDate; to: LocalDate; ids: string[] }>();
+    const addMove = (taskId: string, to: LocalDate) => {
+      const from = fromById.get(taskId);
+      if (from === undefined) return;
+      const key = `${from}>${to}`;
+      const group = moves.get(key) ?? { from, to, ids: [] };
+      group.ids.push(taskId);
+      moves.set(key, group);
+    };
+    for (const id of decisions.keep) addMove(id, today);
+    for (const { taskId, date } of decisions.reschedule) addMove(taskId, date);
+
+    const carried: TaskDTO[] = [];
+    for (const group of [...moves.values()].sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))) {
+      carried.push(...(await carryOverInTx(tx, userId, group.from, group.to, group.ids, now)).carried);
+    }
+    const droppedIds: string[] = [];
+    for (const id of decisions.drop) {
+      if (fromById.has(id) && (await skipTaskInTx(tx, userId, id, now))) droppedIds.push(id);
+    }
+    const handled = new Set([...carried.map((t) => t.id), ...droppedIds]);
+    return { carried, droppedIds, ignoredIds: allIds.filter((id) => !handled.has(id)) };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Log progress (metric goals)

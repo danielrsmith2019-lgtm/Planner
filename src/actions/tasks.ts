@@ -1,11 +1,14 @@
 "use server";
 
-import type { CarryOverResult, CompletionResult } from "@/services/tasks";
+import { z } from "zod";
+import type { CarryOverResolution, CarryOverResult, CompletionResult, UnfinishedTasks } from "@/services/tasks";
 import {
   carryOverTasks,
   completeTask,
   createTask,
+  getUnfinishedTasks,
   logProgress,
+  resolveCarryOver,
   scheduleTask,
   setTaskLink,
   uncompleteTask,
@@ -16,6 +19,7 @@ import {
   carryOverInput,
   createTaskInput,
   logProgressInput,
+  resolveCarryOverInput,
   scheduleTaskInput,
   setTaskLinkInput,
   taskIdInput,
@@ -53,4 +57,14 @@ export async function logProgressAction(input: unknown): Promise<ActionResult<Co
   return runAction(logProgressInput, input, (user, { goalId, amount, title }) =>
     logProgress(user.id, goalId, { amount, title }),
   );
+}
+
+/** TODO tasks scheduled before the user's today (the carry-over banner). */
+export async function getUnfinishedTasksAction(): Promise<ActionResult<UnfinishedTasks>> {
+  return runAction(z.undefined(), undefined, (user) => getUnfinishedTasks(user.id));
+}
+
+/** Keep (to today), reschedule or drop (SKIPPED) each unfinished task. */
+export async function resolveCarryOverAction(input: unknown): Promise<ActionResult<CarryOverResolution>> {
+  return runAction(resolveCarryOverInput, input, (user, decisions) => resolveCarryOver(user.id, decisions));
 }

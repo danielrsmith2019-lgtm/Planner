@@ -51,7 +51,8 @@ export const completionMutationKey = ["completeTask"] as const;
 const DAY_PREFIX = ["day"] as const;
 const GOAL_PREFIX = ["goal"] as const;
 
-const dayHas = (day: DayData | undefined, taskId: string) => day?.tasks.some((t) => t.id === taskId) === true;
+const dayHas = (day: DayData | undefined, taskId: string) =>
+  day !== undefined && (day.tasks.some((t) => t.id === taskId) || day.backlog.some((t) => t.id === taskId));
 const goalHas = (goal: GoalDetailData | undefined, taskId: string) =>
   goal !== undefined &&
   (goal.looseTasks.some((t) => t.id === taskId) || goal.milestones.some((m) => m.tasks.some((t) => t.id === taskId)));

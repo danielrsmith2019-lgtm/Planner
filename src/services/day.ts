@@ -72,14 +72,20 @@ async function milestonesWithCounts(tx: Tx, goalIds: string[]): Promise<Mileston
 }
 
 /**
- * The day's tasks (ordered by rank) and the goal tree: every ACTIVE goal,
- * plus any other goal one of the day's tasks points at (e.g. a paused goal).
+ * The day's tasks (ordered by rank), the backlog (unscheduled TODO tasks) and
+ * the goal tree: every ACTIVE goal, plus any other goal one of those tasks
+ * points at (e.g. a paused goal).
  */
 export async function getDay(userId: string, date: LocalDate): Promise<DayData> {
   const day = fromLocalDate(date);
   return forUser(userId).$transaction(async (tx) => {
     const tasks = await tx.task.findMany({ where: { scheduledDate: day }, orderBy: { rank: "asc" } });
-    const linkedGoalIds = [...new Set(tasks.flatMap((t) => (t.goalId === null ? [] : [t.goalId])))];
+    const backlog = await tx.task.findMany({
+      where: { scheduledDate: null, status: "TODO" },
+      orderBy: { rank: "asc" },
+      take: 200,
+    });
+    const linkedGoalIds = [...new Set([...tasks, ...backlog].flatMap((t) => (t.goalId === null ? [] : [t.goalId])))];
     const goals = await tx.goal.findMany({
       where: { OR: [{ status: "ACTIVE" }, { id: { in: linkedGoalIds } }] },
       orderBy: { rank: "asc" },
@@ -91,6 +97,7 @@ export async function getDay(userId: string, date: LocalDate): Promise<DayData> 
     return {
       date,
       tasks: tasks.map(toTaskDTO),
+      backlog: backlog.map(toTaskDTO),
       goalTree: goals.map((g) =>
         toGoalNode(
           toGoalDTO(g),
