@@ -14,13 +14,13 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: "unit", include: ["src/lib/**/*.test.ts", "src/stores/**/*.test.ts", "src/components/**/*.test.ts"] },
+        test: { name: "unit", include: ["src/lib/**/*.test.ts", "src/stores/**/*.test.ts", "src/components/**/*.test.ts", "src/hooks/**/*.test.ts"] },
       },
       {
         extends: true,
         test: {
           name: "integration",
-          include: ["src/services/**/*.test.ts", "prisma/**/*.test.ts"],
+          include: ["src/services/**/*.test.ts", "src/actions/**/*.test.ts", "prisma/**/*.test.ts"],
           setupFiles: ["./test/setup-db.ts"],
           testTimeout: 30_000,
           hookTimeout: 60_000,

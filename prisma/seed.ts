@@ -5,6 +5,8 @@
  *
  * Optional: SEED_EMAIL and SEED_AUTH_ID attach the data to a real account
  * (e.g. your own, once sign-in exists). Re-running replaces only that user's data.
+ * SEED_NAME and SEED_TIMEZONE keep your name and timezone (defaults: "Demo",
+ * America/New_York), since the user row is recreated.
  */
 import { config } from "dotenv";
 
@@ -22,6 +24,8 @@ async function main() {
     const summary = await seedDemo({
       email: process.env.SEED_EMAIL || undefined,
       authId: process.env.SEED_AUTH_ID || undefined,
+      name: process.env.SEED_NAME || undefined,
+      timezone: process.env.SEED_TIMEZONE || undefined,
     });
     console.log("Seeded demo data:");
     console.table(summary);

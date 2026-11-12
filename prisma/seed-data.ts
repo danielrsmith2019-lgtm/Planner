@@ -19,6 +19,8 @@ export type SeedOptions = {
   /** Supabase auth.users.id to attach the demo data to. */
   authId?: string;
   timezone?: string;
+  /** Display name for the recreated user row. Default "Demo". */
+  name?: string;
   /** The moment to treat as "now". */
   now?: Date;
 };
@@ -62,7 +64,7 @@ export async function seedDemo(options: SeedOptions = {}): Promise<SeedSummary> 
   await prisma.user.deleteMany({ where: { email } });
   // Creating the User row directly is allowed: it's what sign-up will do.
   const user = await prisma.user.create({
-    data: { email, authId: options.authId ?? DEMO_AUTH_ID, name: "Demo", timezone, dayStartsAt: 240 },
+    data: { email, authId: options.authId ?? DEMO_AUTH_ID, name: options.name ?? "Demo", timezone, dayStartsAt: 240 },
   });
   const userId = user.id;
   const today = getLocalToday(user, now);

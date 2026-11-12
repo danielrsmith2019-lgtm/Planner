@@ -40,6 +40,8 @@ const HEADERS: Record<string, HeaderConfig> = {
   "/journal": { title: "Journal", dateNav: true, dateStep: 1, modeChip: false },
   "/goals": { title: "Goals", dateNav: false, dateStep: 1, modeChip: false },
   "/settings": { title: "Settings", dateNav: false, dateStep: 1, modeChip: false },
+  // Temporary (Day 10): data-layer test page, not in the nav.
+  "/debug": { title: "Debug", dateNav: true, dateStep: 1, modeChip: false },
 };
 
 export function getHeaderConfig(pathname: string): HeaderConfig {

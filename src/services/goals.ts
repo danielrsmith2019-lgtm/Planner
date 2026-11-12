@@ -2,9 +2,11 @@ import "server-only";
 
 import type { Goal, Milestone } from "@/generated/prisma/client";
 import { adminDb, forUser, type ScopedTx } from "@/lib/db";
-import { toDayNumber, type LocalDate } from "@/lib/domain/dates";
+import { getLocalToday, toDayNumber, type LocalDate } from "@/lib/domain/dates";
 import { GOAL_COLORS, isGoalColor } from "@/lib/domain/goal-colors";
+import { ACTIVE_GOAL_LIMIT_MESSAGE, MAX_ACTIVE_GOALS } from "@/lib/domain/goal-status";
 import { computeGoalProgress, computeMilestoneProgress, type ProgressMode } from "@/lib/domain/progress";
+import type { GoalStatus } from "@/lib/domain/stalled";
 import { rankAfter } from "@/lib/domain/rank";
 import { NotFoundError, ValidationError } from "./errors";
 import { fromLocalDate, toGoalDTO, toMilestoneDTO, toNumberOrNull, type GoalDTO, type MilestoneDTO } from "./mappers";
@@ -106,7 +108,7 @@ export async function recomputeGoal(goalId: string): Promise<GoalDTO> {
 // ---------------------------------------------------------------------------
 
 /** V1 focus rule: at most 5 active goals, one per goal color. */
-export const MAX_ACTIVE_GOALS = 5;
+export { ACTIVE_GOAL_LIMIT_MESSAGE, MAX_ACTIVE_GOALS };
 
 export type CreateGoalInput = {
   title: string;
@@ -153,10 +155,11 @@ export async function createGoal(userId: string, input: CreateGoalInput): Promis
 
   return forUser(userId).$transaction(async (tx) => {
     const active = await tx.goal.findMany({ where: { status: "ACTIVE" }, select: { color: true } });
-    if (active.length >= MAX_ACTIVE_GOALS) {
-      throw new ValidationError(`You can have at most ${MAX_ACTIVE_GOALS} active goals. Pause or finish one first.`);
-    }
+    if (active.length >= MAX_ACTIVE_GOALS) throw new ValidationError(ACTIVE_GOAL_LIMIT_MESSAGE);
     const used = new Set(active.map((g) => g.color));
+    if (input.color !== undefined && used.has(input.color)) {
+      throw new ValidationError("Another active goal already uses that color. Pick a different one.");
+    }
     const color = input.color ?? GOAL_COLORS.find((c) => !used.has(c)) ?? GOAL_COLORS[0];
     const last = await tx.goal.findFirst({ orderBy: { rank: "desc" }, select: { rank: true } });
 
@@ -219,5 +222,66 @@ export async function createMilestone(
     // A new 0% milestone lowers a MILESTONES goal's weighted progress.
     await recomputeGoalInTx(tx, goalId);
     return toMilestoneDTO(milestone);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Status: pause, resume, complete, archive
+// ---------------------------------------------------------------------------
+
+export type GoalStatusOptions = { now?: Date };
+
+/**
+ * Move a goal between ACTIVE, PAUSED, COMPLETED and ARCHIVED.
+ *
+ * - To ACTIVE (resume, reopen, unarchive): fails with ACTIVE_GOAL_LIMIT_MESSAGE
+ *   when 5 other goals are active. If another active goal took this goal's
+ *   color while it was away, it gets the first free color instead, keeping
+ *   the one-color-per-active-goal rule. completedAt is cleared.
+ * - To COMPLETED: stamps completedAt and logs GOAL_COMPLETED on the user's day.
+ * - PAUSED and ARCHIVED only change the status. Archived goals leave the list.
+ * Setting the status a goal already has changes nothing.
+ */
+export async function setGoalStatus(
+  userId: string,
+  goalId: string,
+  status: GoalStatus,
+  { now = new Date() }: GoalStatusOptions = {},
+): Promise<GoalDTO> {
+  return forUser(userId).$transaction(async (tx) => {
+    const goal = await tx.goal.findUnique({ where: { id: goalId } });
+    if (goal === null) throw new NotFoundError("Goal", goalId);
+    if (goal.status === status) return toGoalDTO(goal);
+
+    if (status === "ACTIVE") {
+      const others = await tx.goal.findMany({
+        where: { status: "ACTIVE", id: { not: goalId } },
+        select: { color: true },
+      });
+      if (others.length >= MAX_ACTIVE_GOALS) throw new ValidationError(ACTIVE_GOAL_LIMIT_MESSAGE);
+      const used = new Set(others.map((g) => g.color));
+      const color = used.has(goal.color) ? (GOAL_COLORS.find((c) => !used.has(c)) ?? goal.color) : goal.color;
+      const updated = await tx.goal.update({ where: { id: goalId }, data: { status, color, completedAt: null } });
+      return toGoalDTO(updated);
+    }
+
+    if (status === "COMPLETED") {
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { timezone: true, dayStartsAt: true } });
+      if (user === null) throw new NotFoundError("User", userId);
+      const updated = await tx.goal.update({ where: { id: goalId }, data: { status, completedAt: now } });
+      await tx.activityEvent.create({
+        data: {
+          userId,
+          type: "GOAL_COMPLETED",
+          localDate: fromLocalDate(getLocalToday(user, now)),
+          goalId,
+          payload: { progress: goal.progress },
+        },
+      });
+      return toGoalDTO(updated);
+    }
+
+    const updated = await tx.goal.update({ where: { id: goalId }, data: { status } });
+    return toGoalDTO(updated);
   });
 }
